@@ -38,8 +38,8 @@ export const navGroups: NavGroup[] = [
   {
     label: 'Operasional',
     items: [
-      { label: 'Servis', icon: ClipboardList, permission: 'service.view', stage: 5 },
-      { label: 'Pelanggan', icon: Users, permission: 'customer.view', stage: 6 },
+      { label: 'Servis', to: '/services', icon: ClipboardList, permission: 'service.view' },
+      { label: 'Pelanggan', to: '/customers', icon: Users, permission: 'customer.view' },
     ],
   },
   {

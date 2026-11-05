@@ -4,9 +4,9 @@ Aplikasi manajemen usaha servis HP untuk teknisi, toko servis, dan usaha reparas
 Dirancang sebagai **modular monolith** yang siap dikembangkan menjadi produk SaaS
 multi-tenant dan multi-outlet.
 
-> **Status proyek: Tahap 4 — Frontend Layout & Dashboard (selesai; QA visual manual tersisa).**
-> Tahap 5 (penerimaan servis, pelanggan, foto & label) berikutnya.
-> Rincian implementasi: [`docs/11-implementasi-tahap-4.md`](docs/11-implementasi-tahap-4.md).
+> **Status proyek: Tahap 5 — Modul Penerimaan Servis, Pelanggan, Foto & Label (selesai).**
+> Tahap 6 (diagnosis, pengerjaan, status machine, item jasa/part) berikutnya.
+> Rincian implementasi: [`docs/12-implementasi-tahap-5.md`](docs/12-implementasi-tahap-5.md).
 
 ---
 
@@ -19,7 +19,7 @@ multi-tenant dan multi-outlet.
 | Auth | JWT HS256 + refresh token rotasi (cookie HttpOnly) |
 | Frontend | React 18.3 + TypeScript 5.7 + Vite 5 |
 | UI | Tailwind CSS 3.4 + komponen lokal kompatibel shadcn/ui + Lucide |
-| State/data | Zustand (sesi & outlet); TanStack Query, React Hook Form + Zod direncanakan Tahap 5+ |
+| State/data | Zustand (sesi & outlet); TanStack Query, React Hook Form + Zod direncanakan Tahap 6+ |
 | Grafik | Recharts |
 | Cetak | Invoice A4, struk thermal 58 mm / 80 mm, label servis |
 | Deployment | Docker Compose + Nginx |
@@ -55,7 +55,8 @@ Penjelasan lengkap: [`docs/04-struktur-folder.md`](docs/04-struktur-folder.md).
 | [09 — Implementasi Tahap 2](docs/09-implementasi-tahap-2.md) | Migrasi, seed, environment, portable DB, CLI, health, hasil test |
 | [10 — Implementasi Tahap 3](docs/10-implementasi-tahap-3.md) | Auth JWT, refresh rotation, RBAC, user management, frontend login, hasil test |
 | [11 — Implementasi Tahap 4](docs/11-implementasi-tahap-4.md) | App shell, dashboard data nyata, grafik, alert, PWA, hasil test |
-| [OpenAPI Tahap 4](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, health |
+| [12 — Implementasi Tahap 5](docs/12-implementasi-tahap-5.md) | Modul servis intake, pelanggan, kredensial terenkripsi, foto, cetak label |
+| [OpenAPI Tahap 5](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, health |
 
 ## 4. Cara Menjalankan (Development)
 

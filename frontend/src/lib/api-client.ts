@@ -52,9 +52,9 @@ async function requestRaw(path: string, options: RequestOptions = {}): Promise<R
   });
 }
 
-async function decode<T>(response: Response): Promise<T> {
+async function decodeEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   if (response.status === 204) {
-    return undefined as T;
+    return { success: true, data: undefined as T };
   }
   const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!response.ok || !payload?.success) {
@@ -64,7 +64,12 @@ async function decode<T>(response: Response): Promise<T> {
     };
     throw new ApiError(response.status, payload?.error ?? fallback, payload?.request_id);
   }
-  return payload.data;
+  return payload;
+}
+
+async function decode<T>(response: Response): Promise<T> {
+  const env = await decodeEnvelope<T>(response);
+  return env.data;
 }
 
 /**
@@ -95,8 +100,31 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
   return decode<T>(response);
 }
 
+export async function apiRequestEnvelope<T>(path: string, options: RequestOptions = {}, retry = true): Promise<ApiEnvelope<T>> {
+  let response: Response;
+  try {
+    response = await requestRaw(path, options);
+  } catch {
+    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.' });
+  }
+
+  if (response.status === 401 && retry && !path.startsWith('/auth/refresh') && !path.startsWith('/auth/login')) {
+    const payload = (await response.clone().json().catch(() => null)) as ApiEnvelope<unknown> | null;
+    if (payload?.error?.code === 'TOKEN_EXPIRED') {
+      const session = await refreshSession();
+      if (session) {
+        return apiRequestEnvelope<T>(path, options, false);
+      }
+    }
+    notifyUnauthorized();
+  }
+
+  return decodeEnvelope<T>(response);
+}
+
 export const api = {
   get: <T>(path: string) => apiRequest<T>(path, { method: 'GET' }),
+  getEnvelope: <T>(path: string) => apiRequestEnvelope<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'POST', body: body ?? {} }),
   put: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PUT', body: body ?? {} }),
   patch: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PATCH', body: body ?? {} }),

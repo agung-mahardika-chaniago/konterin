@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: FixPhone API
-  version: 0.4.0
+  version: 0.5.0
   description: |
-    Kontrak API FixPhone untuk Tahap 4: autentikasi, sesi, RBAC, pengguna,
-    role, outlet, dan dashboard. Semua waktu memakai ISO-8601 UTC dan semua
-    nominal uang berupa integer rupiah.
+    Kontrak API FixPhone untuk Tahap 5: autentikasi, sesi, RBAC, pengguna,
+    role, outlet, dashboard, pelanggan, intake servis HP, kredensial perangkat,
+    dan dokumentasi foto. Semua waktu memakai ISO-8601 UTC dan semua nominal
+    uang berupa integer rupiah.
 
     Tanggal dan rentang pada endpoint dashboard ditafsirkan pada timezone
     outlet aktif (`outlets.timezone`, default `Asia/Jakarta`).
@@ -22,6 +23,8 @@ tags:
   - name: Auth
   - name: Users
   - name: Dashboard
+  - name: Customers
+  - name: ServiceOrders
   - name: Meta
 
 paths:

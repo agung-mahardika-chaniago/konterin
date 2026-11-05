@@ -5,7 +5,12 @@ import { ChangePasswordPage } from '@/features/auth/change-password-page';
 import { LoginPage } from '@/features/auth/login-page';
 import { PermissionGuard } from '@/features/auth/permission-guard';
 import { RequireAuth } from '@/features/auth/require-auth';
+import { CustomerDetailPage } from '@/features/customers/pages/customer-detail-page';
+import { CustomerListPage } from '@/features/customers/pages/customer-list-page';
 import { DashboardPage } from '@/features/dashboard/dashboard-page';
+import { ServiceCreatePage } from '@/features/services/pages/service-create-page';
+import { ServiceDetailPage } from '@/features/services/pages/service-detail-page';
+import { ServiceListPage } from '@/features/services/pages/service-list-page';
 import { ForbiddenPage } from '@/pages/forbidden-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { PlatformPage } from '@/pages/platform-page';
@@ -45,6 +50,66 @@ export function AppRouter() {
             <PermissionGuard permission="dashboard.view">
               <AppShell>
                 <DashboardPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/services"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="service.view">
+              <AppShell>
+                <ServiceListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/services/new"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="service.create">
+              <AppShell>
+                <ServiceCreatePage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/services/:id"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="service.view">
+              <AppShell>
+                <ServiceDetailPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/customers"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="customer.view">
+              <AppShell>
+                <CustomerListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/customers/:id"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="customer.view">
+              <AppShell>
+                <CustomerDetailPage />
               </AppShell>
             </PermissionGuard>
           </RequireAuth>
