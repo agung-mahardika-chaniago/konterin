@@ -1,0 +1,12 @@
+# Override development: membuka port database ke localhost (55432, sama dengan
+# DB_DSN default) dan menambah batas log agar tidak menghabiskan disk.
+# Jalankan: docker compose up -d
+services:
+  db:
+    ports:
+      - "127.0.0.1:55432:5432"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

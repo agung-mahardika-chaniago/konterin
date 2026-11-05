@@ -1,0 +1,1338 @@
+openapi: 3.1.0
+info:
+  title: FixPhone API
+  version: 0.4.0
+  description: |
+    Kontrak API FixPhone untuk Tahap 4: autentikasi, sesi, RBAC, pengguna,
+    role, outlet, dan dashboard. Semua waktu memakai ISO-8601 UTC dan semua
+    nominal uang berupa integer rupiah.
+
+    Tanggal dan rentang pada endpoint dashboard ditafsirkan pada timezone
+    outlet aktif (`outlets.timezone`, default `Asia/Jakarta`).
+
+    Access token dikirim melalui header `Authorization: Bearer <token>`.
+    Refresh token hanya disimpan di cookie `fixphone_refresh`
+    (`HttpOnly; SameSite=Strict; Path=/api/v1/auth`).
+servers:
+  - url: /api/v1
+    description: API root melalui reverse proxy
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Users
+  - name: Dashboard
+  - name: Meta
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Masuk dan mulai sesi
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login berhasil; cookie refresh dipasang.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: fixphone_refresh=...; HttpOnly; SameSite=Strict; Path=/api/v1/auth
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotasi refresh token
+      security:
+        - refreshCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '200':
+          description: Token baru diterbitkan; refresh token lama dicabut.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '401':
+          description: Sesi tidak valid, kedaluwarsa, atau token digunakan ulang.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Cabut sesi aktif
+      responses:
+        '200':
+          description: Sesi dicabut dan cookie dibersihkan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Profil pengguna yang sedang login
+      responses:
+        '200':
+          description: Profil, role, permission, dan outlet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/profile:
+    patch:
+      tags: [Auth]
+      summary: Ubah profil sendiri
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profil terbaru.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Ubah password sendiri dan cabut semua sesi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password berhasil diubah.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Password lama salah atau password baru tidak memenuhi kebijakan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /users:
+    get:
+      tags: [Users]
+      summary: Daftar pengguna tenant
+      description: Memerlukan permission `user.view`.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [owner, admin, technician, cashier]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+      responses:
+        '200':
+          description: Daftar pengguna ter-scope tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Users]
+      summary: Tambah pengguna
+      description: Memerlukan permission `user.manage`. Admin tidak dapat membuat owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: Pengguna dibuat dengan `must_change_password=true`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Users]
+      summary: Detail pengguna
+      responses:
+        '200':
+          description: Detail pengguna dalam tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Users]
+      summary: Ubah pengguna
+      description: Tidak dapat menonaktifkan akun sendiri atau mengubah owner sebagai admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Pengguna terbaru.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Aksi ditolak, misalnya menonaktifkan diri sendiri atau owner terakhir.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/Validation'
+    delete:
+      tags: [Users]
+      summary: Hapus (soft delete) pengguna
+      responses:
+        '200':
+          description: Pengguna dihapus dan sesinya dicabut.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Tidak dapat menghapus diri sendiri atau owner terakhir.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /users/{id}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [Users]
+      summary: Reset password pengguna
+      description: Mengembalikan password sementara satu kali, mewajibkan ganti password, dan mencabut semua sesi pengguna.
+      responses:
+        '200':
+          description: Password sementara dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Tidak dapat mereset password akun sendiri.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /users/{id}/outlets:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    put:
+      tags: [Users]
+      summary: Ganti penugasan outlet pengguna
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceOutletsRequest'
+      responses:
+        '200':
+          description: Pengguna dengan outlet terbaru.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /roles:
+    get:
+      tags: [Users]
+      summary: Daftar role tenant dan permission-nya
+      responses:
+        '200':
+          description: Role sistem tenant (tanpa super_admin).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleListEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /permissions:
+    get:
+      tags: [Users]
+      summary: Daftar permission tenant
+      responses:
+        '200':
+          description: Permission non-platform.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionListEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /outlets:
+    get:
+      tags: [Users]
+      summary: Daftar outlet yang dapat diakses
+      description: Memerlukan permission `outlet.view`.
+      responses:
+        '200':
+          description: Outlet sesuai scope pengguna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutletListEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Users]
+      summary: Tambah outlet
+      description: Memerlukan permission `outlet.manage`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOutletRequest'
+      responses:
+        '201':
+          description: Outlet dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutletEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /outlets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Users]
+      summary: Ubah outlet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOutletRequest'
+      responses:
+        '200':
+          description: Outlet terbaru.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutletEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: Ringkasan operasional hari ini
+      description: |
+        Memerlukan permission `dashboard.view` dan hanya tersedia untuk
+        pengguna tenant. Pendapatan dihitung dari pembayaran berstatus
+        `posted`. Bila `outlet_id` tidak diisi, server memakai outlet aktif
+        dari header `X-Outlet-Id` atau outlet pertama yang dapat diakses.
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Tanggal acuan pada timezone outlet (default hari ini).
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ringkasan hari ini.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummaryEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /dashboard/charts:
+    get:
+      tags: [Dashboard]
+      summary: Seri harian pendapatan dan servis
+      description: |
+        Mengembalikan setiap hari dalam rentang, termasuk hari tanpa data
+        (nilai `0`). Default 7 hari terakhir; maksimal 90 hari.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Seri harian inklusif.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardChartsEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: Format tanggal salah, rentang terbalik, atau terlalu panjang.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /dashboard/alerts:
+    get:
+      tags: [Dashboard]
+      summary: Daftar tindakan yang perlu diambil
+      description: |
+        Servis melewati estimasi, perangkat belum diambil, dan sparepart di
+        bawah stok minimum. Maksimal 20 item per kategori. Stok sparepart
+        bersifat tingkat tenant.
+      parameters:
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Daftar peringatan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardAlertsEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /dashboard/technicians:
+    get:
+      tags: [Dashboard]
+      summary: Aktivitas teknisi per rentang
+      description: |
+        Hanya teknisi yang memiliki minimal satu order pada rentang yang
+        ditampilkan. Default 30 hari terakhir; maksimal 180 hari.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Aktivitas teknisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardTechnicianListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /healthz:
+    get:
+      tags: [Meta]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Proses berjalan.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  version:
+                    type: string
+                  time:
+                    type: string
+                    format: date-time
+
+  /readyz:
+    get:
+      tags: [Meta]
+      summary: Readiness probe
+      security: []
+      responses:
+        '200':
+          description: Database siap dan versi migrasi sesuai.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+        '503':
+          description: Database/migrasi belum siap.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+
+  /version:
+    get:
+      tags: [Meta]
+      summary: Metadata build
+      security: []
+      responses:
+        '200':
+          description: Versi API.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  commit:
+                    type: string
+                  build_date:
+                    type: string
+                  go_version:
+                    type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: fixphone_refresh
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Token tidak ada/tidak valid/kedaluwarsa.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Tidak memiliki permission atau berada di luar scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Resource tidak ada atau bukan milik tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Aksi bertentangan dengan aturan bisnis atau duplikat.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Validation:
+      description: Validasi field gagal.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimited:
+      description: Terlalu banyak request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 150
+        password:
+          type: string
+          minLength: 1
+          maxLength: 72
+
+    UpdateProfileRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        avatar_path:
+          type: [string, 'null']
+          maxLength: 255
+          description: Harus diawali `uploads/` atau `/uploads/`.
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 72
+
+    AuthOutlet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+        avatar_path:
+          type: [string, 'null']
+        role:
+          type: string
+          enum: [super_admin, owner, admin, technician, cashier]
+        tenant_id:
+          type: [string, 'null']
+          format: uuid
+        permissions:
+          type: array
+          items:
+            type: string
+        outlets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthOutlet'
+        active_outlet_id:
+          type: [string, 'null']
+          format: uuid
+        must_change_password:
+          type: boolean
+        last_login_at:
+          type: [string, 'null']
+          format: date-time
+
+    Session:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          description: Detik sampai access token kedaluwarsa.
+        user:
+          $ref: '#/components/schemas/AuthUser'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+        role:
+          type: string
+        role_name:
+          type: string
+        is_active:
+          type: boolean
+        must_change_password:
+          type: boolean
+        last_login_at:
+          type: [string, 'null']
+          format: date-time
+        outlets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthOutlet'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required: [name, email, role, password]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        role:
+          type: string
+          enum: [owner, admin, technician, cashier]
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+        outlet_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        is_active:
+          type: boolean
+          default: true
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        role:
+          type: string
+          enum: [owner, admin, technician, cashier]
+        is_active:
+          type: boolean
+
+    ReplaceOutletsRequest:
+      type: object
+      required: [outlet_ids]
+      properties:
+        outlet_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ResetPassword:
+      type: object
+      properties:
+        temporary_password:
+          type: string
+        must_change_password:
+          type: boolean
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    Permission:
+      type: object
+      properties:
+        code:
+          type: string
+        module:
+          type: string
+        description:
+          type: [string, 'null']
+
+    Outlet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        address:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        timezone:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateOutletRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 20
+        name:
+          type: string
+          maxLength: 120
+        address:
+          type: [string, 'null']
+          maxLength: 500
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        timezone:
+          type: string
+          maxLength: 50
+        is_active:
+          type: boolean
+          default: true
+
+    UpdateOutletRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 20
+        name:
+          type: string
+          maxLength: 120
+        address:
+          type: [string, 'null']
+          maxLength: 500
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        timezone:
+          type: string
+          maxLength: 50
+        is_active:
+          type: boolean
+
+    Meta:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          $ref: '#/components/schemas/ApiError'
+        request_id:
+          type: string
+
+    SessionEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Session'
+
+    ProfileEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/AuthUser'
+
+    UserEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/User'
+
+    UserListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ResetPasswordEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ResetPassword'
+
+    RoleListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+
+    PermissionListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+
+    OutletListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Outlet'
+
+    OutletEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Outlet'
+
+    MessageEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+
+    DashboardSummary:
+      type: object
+      properties:
+        services_today:
+          type: integer
+        waiting_count:
+          type: integer
+        in_progress_count:
+          type: integer
+        completed_count:
+          type: integer
+        not_picked_up_count:
+          type: integer
+        revenue_today:
+          type: integer
+          description: Rupiah dari pembayaran posted hari ini.
+        revenue_month:
+          type: integer
+          description: Rupiah dari pembayaran posted bulan berjalan.
+        total_customers:
+          type: integer
+          description: Pelanggan tenant yang belum dihapus.
+        alerts:
+          type: object
+          properties:
+            overdue:
+              type: integer
+            not_picked_up_3d:
+              type: integer
+            low_stock:
+              type: integer
+
+    DashboardChartPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        label:
+          type: string
+          example: 04 Nov
+        revenue:
+          type: integer
+        services_received:
+          type: integer
+        services_completed:
+          type: integer
+
+    DashboardCharts:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardChartPoint'
+
+    DashboardAlertItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_no:
+          type: string
+        customer_name:
+          type: string
+        device:
+          type: string
+        status:
+          type: string
+        estimated_done_at:
+          type: [string, 'null']
+          format: date-time
+        completed_at:
+          type: [string, 'null']
+          format: date-time
+        days:
+          type: integer
+
+    DashboardStockAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        stock:
+          type: integer
+        min_stock:
+          type: integer
+
+    DashboardAlerts:
+      type: object
+      properties:
+        overdue:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardAlertItem'
+        not_picked_up:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardAlertItem'
+        low_stock:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardStockAlert'
+
+    DashboardTechnician:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        completed_count:
+          type: integer
+        active_count:
+          type: integer
+        avg_minutes:
+          type: integer
+          description: Rata-rata menit dari mulai pengerjaan sampai selesai.
+
+    DashboardSummaryEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/DashboardSummary'
+
+    DashboardChartsEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/DashboardCharts'
+
+    DashboardAlertsEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/DashboardAlerts'
+
+    DashboardTechnicianListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardTechnician'
+
+    Ready:
+      type: object
+      properties:
+        status:
+          type: string
+        database:
+          type: string
+        migration_version:
+          type: integer
+        migration_expected:
+          type: integer
+        dirty:
+          type: boolean
+        error:
+          type: string
+        time:
+          type: string
+          format: date-time

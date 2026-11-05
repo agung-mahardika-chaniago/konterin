@@ -1,0 +1,52 @@
+# ===== Environment & secrets =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!deploy/nginx/*.conf
+
+# ===== Go =====
+backend/bin/
+backend/tmp/
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/.air.toml
+*.test
+*.out
+coverage.out
+coverage.html
+
+# ===== Node / frontend =====
+node_modules/
+frontend/dist/
+frontend/dev-dist/
+frontend/.vite/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Database & backup =====
+.dev/
+*.sql.gz
+*.dump
+backups/
+deploy/backups/
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+
+# ===== Logs =====
+logs/
+*.log

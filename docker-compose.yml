@@ -1,0 +1,32 @@
+# FixPhone — PostgreSQL 16 untuk development/produksi kecil.
+# Nilai default dapat ditimpa lewat .env (lihat .env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fixphone-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-fixphone_dev}
+      TZ: ${TZ:-Asia/Jakarta}
+      PGTZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/docker/postgres/init.sql:/docker-entrypoint-initdb.d/00-fixphone-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - fixphone
+
+volumes:
+  pgdata:
+    name: fixphone-pgdata
+
+networks:
+  fixphone:
+    name: fixphone-network
