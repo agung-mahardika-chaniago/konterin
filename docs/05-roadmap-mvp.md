@@ -257,13 +257,13 @@ frontend/src/features/services/components/{diagnosis-form,items-editor,
 - [x] Stok berkurang tepat sekali; percobaan ganda tidak menggandakan.
 - [x] Stok tidak cukup → 409, item tidak tersimpan.
 - [x] Timeline menampilkan seluruh perubahan.
-- [ ] Teknisi hanya melihat order yang ditugaskan (jika setting aktif).
+- [x] Teknisi hanya melihat order yang ditugaskan (jika setting aktif).
 - [x] Total item dihitung server, bukan klien.
 
-> **Status:** selesai. Filter "hanya order yang ditugaskan" menunggu pengaturan
-> tenant pada Tahap 10; saat ini teknisi dapat melihat order satu outlet sesuai
-> matriks RBAC. Bukti implementasi dan hasil test ada di
-> [`13 — Implementasi Tahap 6`](13-implementasi-tahap-6.md).
+> **Status:** selesai. Filter "hanya order yang ditugaskan" sudah aktif melalui
+> `business_settings.technician_sees_only_assigned` dan diterapkan pada daftar
+> serta detail servis. Bukti implementasi dan hasil test ada di
+> [`13 - Implementasi Tahap 6`](13-implementasi-tahap-6.md).
 
 ---
 
@@ -287,11 +287,16 @@ frontend/src/features/inventory/*
 7. Import/export sparepart (CSV) — opsional S.
 
 **Acceptance**
-- [ ] Semua mutasi stok memiliki movement dan pelaku.
-- [ ] Stok tidak bisa negatif.
-- [ ] Nilai inventory = Σ(stok × harga modal) benar.
-- [ ] Alert muncul saat stok ≤ minimum.
-- [ ] Barcode/SKU lookup bekerja.
+- [x] Semua mutasi stok memiliki movement dan pelaku.
+- [x] Stok tidak bisa negatif.
+- [x] Nilai inventory = Σ(stok × harga modal) benar.
+- [x] Alert muncul saat stok ≤ minimum.
+- [x] Barcode/SKU lookup bekerja.
+
+> **Status:** selesai (v0.7.0). Import/export CSV tetap opsional dan belum
+> diimplementasikan. Barcode scanner USB/HT di form item servis memakai input
+> pencarian yang mencocokkan nama, SKU, dan barcode. Bukti implementasi ada di
+> [`14 - Implementasi Tahap 7`](14-implementasi-tahap-7.md).
 
 ---
 
@@ -535,12 +540,11 @@ perubahan status.
 
 ## 8. Langkah Berikutnya
 
-Tahap 6 selesai. Tahap 7 (inventori sparepart lengkap) dimulai dengan:
+Tahap 7 selesai. Tahap 8 (invoice, kasir, dan pembayaran) dimulai dengan:
 
-1. CRUD sparepart, kategori, supplier, dan SKU/barcode unik.
-2. Pencarian lanjutan, filter kategori/stok menipis, dan pagination.
-3. Pembelian stok (`in`) dan opname (`adjustment`) dengan alasan.
-4. Riwayat pergerakan stok + filter.
-5. Alert minimum stock, nilai inventori, dan sparepart terlaris.
-6. Barcode scan pada form pemakaian (kamera/scanner).
-7. Import/export sparepart CSV (opsional).
+1. Invoice otomatis draft + finalisasi, diskon, dan snapshot item.
+2. Pembayaran tunai/transfer/QRIS/kartu, DP parsial, dan validasi overpay.
+3. Void pembayaran + alasan + audit.
+4. Status invoice otomatis dan aturan pickup wajib lunas.
+5. Cetak invoice A4, struk thermal, dan tombol WhatsApp.
+6. Laporan transaksi harian dan rekap metode bayar.

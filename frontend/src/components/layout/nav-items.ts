@@ -45,9 +45,9 @@ export const navGroups: NavGroup[] = [
   {
     label: 'Inventori',
     items: [
-      { label: 'Sparepart', icon: Boxes, permission: 'sparepart.view', stage: 7 },
-      { label: 'Pergerakan Stok', icon: Warehouse, permission: 'inventory.view', stage: 7 },
-      { label: 'Pembelian', icon: ShoppingCart, permission: 'inventory.purchase', stage: 7 },
+      { label: 'Sparepart', to: '/spareparts', icon: Boxes, permission: 'sparepart.view' },
+      { label: 'Pergerakan Stok', to: '/inventory/movements', icon: Warehouse, permission: 'inventory.view' },
+      { label: 'Pembelian', to: '/inventory/purchases/new', icon: ShoppingCart, permission: 'inventory.purchase' },
     ],
   },
   {

@@ -13,6 +13,7 @@ import (
 	"fixphone/backend/internal/middleware"
 	"fixphone/backend/internal/modules/auth"
 	"fixphone/backend/internal/modules/dashboard"
+	"fixphone/backend/internal/modules/inventory"
 	"fixphone/backend/internal/modules/outlet"
 	servicemod "fixphone/backend/internal/modules/service"
 	"fixphone/backend/internal/modules/user"
@@ -101,6 +102,7 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		EncKey:         cfg.AppEncKey,
 		AppBaseURL:     cfg.AppBaseURL,
 	})
+	inventoryModule := inventory.NewService(db)
 
 	authMiddleware := middleware.Auth(tokenManager, authService)
 	tenantMiddleware := middleware.Tenant(db)
@@ -120,6 +122,7 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		outlet.RegisterRoutes(api, outlet.NewHandler(outletService), authMiddleware, tenantMiddleware, can)
 		dashboard.RegisterRoutes(api, dashboard.NewHandler(dashboardService), authMiddleware, tenantMiddleware, can)
 		servicemod.RegisterRoutes(api, servicemod.NewHandler(serviceModule), authMiddleware, tenantMiddleware, can)
+		inventory.RegisterRoutes(api, inventory.NewHandler(inventoryModule), authMiddleware, tenantMiddleware, can)
 	}
 
 	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {

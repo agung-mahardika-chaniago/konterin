@@ -536,8 +536,8 @@ func (s *Service) SearchSpareparts(ctx context.Context, actor Actor, q string, l
 
 	if trimmed := strings.TrimSpace(q); trimmed != "" {
 		like := "%" + trimmed + "%"
-		query += ` AND (name ILIKE ? OR sku ILIKE ? OR compatible_models ILIKE ?)`
-		args = append(args, like, like, like)
+		query += ` AND (name ILIKE ? OR sku ILIKE ? OR barcode ILIKE ? OR compatible_models ILIKE ?)`
+		args = append(args, like, like, like, like)
 	}
 
 	query += ` ORDER BY name ASC LIMIT ?`

@@ -882,6 +882,424 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /spareparts:
+    get:
+      tags: [Inventory]
+      summary: Daftar sparepart
+      description: Memerlukan permission `sparepart.view`.
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Nama, SKU, barcode, atau model kompatibel.
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: supplier_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: low_stock
+          in: query
+          schema:
+            type: boolean
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar sparepart.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SparepartListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Inventory]
+      summary: Tambah sparepart
+      description: Memerlukan permission `sparepart.create`. Stok awal > 0 menulis movement `initial`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSparepartRequest'
+      responses:
+        '201':
+          description: Sparepart dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SparepartEnvelope'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /spareparts/barcode/{code}:
+    get:
+      tags: [Inventory]
+      summary: Cari sparepart lewat barcode atau SKU
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sparepart ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SparepartEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /spareparts/{id}:
+    get:
+      tags: [Inventory]
+      summary: Detail sparepart
+      parameters:
+        - $ref: '#/components/parameters/SparepartId'
+      responses:
+        '200':
+          description: Detail sparepart.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SparepartEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Inventory]
+      summary: Ubah master sparepart
+      description: Memerlukan permission `sparepart.update`. Stok tidak dapat diubah lewat endpoint ini.
+      parameters:
+        - $ref: '#/components/parameters/SparepartId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSparepartRequest'
+      responses:
+        '200':
+          description: Sparepart diperbarui.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SparepartEnvelope'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+    delete:
+      tags: [Inventory]
+      summary: Hapus sparepart
+      description: Soft delete; riwayat movement tetap tersimpan.
+      parameters:
+        - $ref: '#/components/parameters/SparepartId'
+      responses:
+        '200':
+          description: Sparepart dihapus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /spareparts/{id}/movements:
+    get:
+      tags: [Inventory]
+      summary: Riwayat pergerakan stok satu sparepart
+      description: Memerlukan permission `inventory.view`.
+      parameters:
+        - $ref: '#/components/parameters/SparepartId'
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: Tanggal awal YYYY-MM-DD atau RFC3339.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: Tanggal akhir YYYY-MM-DD atau RFC3339.
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar movement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementListEnvelope'
+
+  /sparepart-categories:
+    get:
+      tags: [Inventory]
+      summary: Daftar kategori sparepart
+      responses:
+        '200':
+          description: Daftar kategori.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListEnvelope'
+    post:
+      tags: [Inventory]
+      summary: Tambah kategori
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+      responses:
+        '201':
+          description: Kategori dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryEnvelope'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /sparepart-categories/{id}:
+    patch:
+      tags: [Inventory]
+      summary: Ubah nama kategori
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+      responses:
+        '200':
+          description: Kategori diperbarui.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /suppliers:
+    get:
+      tags: [Inventory]
+      summary: Daftar supplier
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Daftar supplier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierListEnvelope'
+    post:
+      tags: [Inventory]
+      summary: Tambah supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierRequest'
+      responses:
+        '201':
+          description: Supplier dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierEnvelope'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /suppliers/{id}:
+    patch:
+      tags: [Inventory]
+      summary: Ubah supplier
+      parameters:
+        - $ref: '#/components/parameters/SupplierId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierRequest'
+      responses:
+        '200':
+          description: Supplier diperbarui.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /inventory/purchases:
+    post:
+      tags: [Inventory]
+      summary: Catat pembelian stok
+      description: Memerlukan permission `inventory.purchase`. Satu referensi untuk semua baris.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+      responses:
+        '201':
+          description: Pembelian tercatat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseEnvelope'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /inventory/adjustments:
+    post:
+      tags: [Inventory]
+      summary: Penyesuaian stok (opname)
+      description: Memerlukan permission `inventory.adjust`. Alasan wajib diisi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustmentRequest'
+      responses:
+        '201':
+          description: Penyesuaian tercatat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementEnvelope'
+        '409':
+          description: Stok baru sama dengan stok saat ini.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /inventory/movements:
+    get:
+      tags: [Inventory]
+      summary: Riwayat pergerakan stok seluruh sparepart
+      description: Memerlukan permission `inventory.view`; hasil dibatasi outlet yang dapat diakses aktor.
+      parameters:
+        - name: sparepart_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: movement_type
+          in: query
+          schema:
+            type: string
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar movement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementListEnvelope'
+
+  /inventory/alerts:
+    get:
+      tags: [Inventory]
+      summary: Alert stok minimum
+      responses:
+        '200':
+          description: Sparepart aktif dengan stok di bawah atau sama dengan minimum.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockAlertListEnvelope'
+
+  /inventory/valuation:
+    get:
+      tags: [Inventory]
+      summary: Nilai persediaan
+      description: Memerlukan permission `inventory.cost.view`.
+      responses:
+        '200':
+          description: Total item, stok, dan nilai persediaan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValuationEnvelope'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /inventory/top-used:
+    get:
+      tags: [Inventory]
+      summary: Sparepart paling banyak dipakai
+      description: Memerlukan permission `report.view`. Default 30 hari terakhir.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Peringkat pemakaian sparepart.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopUsedListEnvelope'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -925,6 +1343,27 @@ components:
         format: uuid
     ItemId:
       name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SparepartId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CategoryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SupplierId:
+      name: id
       in: path
       required: true
       schema:
@@ -1972,3 +2411,498 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SparepartOption'
+
+    Sparepart:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        barcode:
+          type: [string, 'null']
+        name:
+          type: string
+        category_id:
+          type: [string, 'null']
+          format: uuid
+        category_name:
+          type: [string, 'null']
+        supplier_id:
+          type: [string, 'null']
+          format: uuid
+        supplier_name:
+          type: [string, 'null']
+        compatible_models:
+          type: [string, 'null']
+        stock:
+          type: integer
+        min_stock:
+          type: integer
+        cost_price:
+          type: integer
+          format: int64
+          description: 0 bila aktor tidak memiliki `inventory.cost.view`.
+        sell_price:
+          type: integer
+          format: int64
+        stock_value:
+          type: integer
+          format: int64
+          description: 0 bila aktor tidak memiliki `inventory.cost.view`.
+        location:
+          type: [string, 'null']
+        is_active:
+          type: boolean
+        low_stock:
+          type: boolean
+        last_stock_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SparepartEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Sparepart'
+
+    SparepartListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Sparepart'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CreateSparepartRequest:
+      type: object
+      required: [sku, name]
+      properties:
+        sku:
+          type: string
+          maxLength: 40
+        barcode:
+          type: string
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 150
+        category_id:
+          type: string
+          format: uuid
+        supplier_id:
+          type: string
+          format: uuid
+        compatible_models:
+          type: string
+          maxLength: 2000
+        stock:
+          type: integer
+          minimum: 0
+          default: 0
+        min_stock:
+          type: integer
+          minimum: 0
+          default: 0
+        cost_price:
+          type: integer
+          format: int64
+          minimum: 0
+        sell_price:
+          type: integer
+          format: int64
+          minimum: 0
+        location:
+          type: string
+          maxLength: 60
+        is_active:
+          type: boolean
+
+    UpdateSparepartRequest:
+      type: object
+      properties:
+        sku:
+          type: string
+          maxLength: 40
+        barcode:
+          type: string
+          maxLength: 60
+          description: String kosong menghapus barcode.
+        name:
+          type: string
+          maxLength: 150
+        category_id:
+          type: string
+          description: String kosong menghapus kategori.
+        supplier_id:
+          type: string
+          description: String kosong menghapus supplier.
+        compatible_models:
+          type: string
+          maxLength: 2000
+        min_stock:
+          type: integer
+          minimum: 0
+        cost_price:
+          type: integer
+          format: int64
+          minimum: 0
+        sell_price:
+          type: integer
+          format: int64
+          minimum: 0
+        location:
+          type: string
+          maxLength: 60
+        is_active:
+          type: boolean
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sparepart_count:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+
+    CategoryEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Category'
+
+    CategoryListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+
+    CategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 80
+
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        contact_name:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        address:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SupplierEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Supplier'
+
+    SupplierListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supplier'
+
+    SupplierRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        contact_name:
+          type: string
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 30
+        address:
+          type: string
+          maxLength: 500
+        notes:
+          type: string
+          maxLength: 1000
+
+    Movement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sparepart_id:
+          type: string
+          format: uuid
+        sparepart_name:
+          type: string
+        sku:
+          type: string
+        outlet_id:
+          type: string
+          format: uuid
+        outlet_name:
+          type: string
+        movement_type:
+          type: string
+          enum:
+            - initial
+            - purchase_in
+            - service_out
+            - service_return
+            - adjustment_in
+            - adjustment_out
+            - transfer_in
+            - transfer_out
+        qty:
+          type: integer
+        stock_before:
+          type: integer
+        stock_after:
+          type: integer
+        unit_cost:
+          type: integer
+          format: int64
+          description: 0 bila aktor tidak memiliki `inventory.cost.view`.
+        reference_type:
+          type: string
+          enum: [service_order, purchase, opname, transfer]
+        reference_id:
+          type: [string, 'null']
+          format: uuid
+        notes:
+          type: [string, 'null']
+        created_by:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+
+    MovementEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Movement'
+
+    MovementListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Movement'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    PurchaseRequest:
+      type: object
+      required: [items]
+      properties:
+        supplier_id:
+          type: string
+          format: uuid
+        reference_no:
+          type: string
+          maxLength: 60
+        purchased_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sparepart_id, qty]
+            properties:
+              sparepart_id:
+                type: string
+                format: uuid
+              qty:
+                type: integer
+                minimum: 1
+              unit_cost:
+                type: integer
+                format: int64
+                minimum: 0
+        notes:
+          type: string
+          maxLength: 1000
+
+    PurchaseEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            reference_id:
+              type: string
+              format: uuid
+            purchased_at:
+              type: string
+              format: date-time
+            total_cost:
+              type: integer
+              format: int64
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Movement'
+
+    AdjustmentRequest:
+      type: object
+      required: [sparepart_id, new_stock, reason]
+      properties:
+        sparepart_id:
+          type: string
+          format: uuid
+        new_stock:
+          type: integer
+          minimum: 0
+        reason:
+          type: string
+          maxLength: 500
+        notes:
+          type: string
+          maxLength: 1000
+
+    StockAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        category_name:
+          type: [string, 'null']
+        stock:
+          type: integer
+        min_stock:
+          type: integer
+        shortage:
+          type: integer
+
+    StockAlertListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockAlert'
+
+    Valuation:
+      type: object
+      properties:
+        total_items:
+          type: integer
+          format: int64
+        total_stock:
+          type: integer
+          format: int64
+        total_value:
+          type: integer
+          format: int64
+
+    ValuationEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Valuation'
+
+    TopUsed:
+      type: object
+      properties:
+        sparepart_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        used_qty:
+          type: integer
+          format: int64
+        movement_count:
+          type: integer
+          format: int64
+
+    TopUsedListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopUsed'

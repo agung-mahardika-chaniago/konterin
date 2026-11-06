@@ -457,22 +457,40 @@ GET /api/v1/spareparts/search?q=LCD&limit=20
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/spareparts?q&category_id&low_stock&page` | `sparepart.view` |
+| GET | `/spareparts?q&category_id&supplier_id&low_stock&is_active&page&per_page` | `sparepart.view` |
 | POST | `/spareparts` | `sparepart.create` |
 | GET | `/spareparts/:id` | `sparepart.view` |
 | PATCH | `/spareparts/:id` | `sparepart.update` |
 | DELETE | `/spareparts/:id` | `sparepart.delete` |
 | GET | `/spareparts/barcode/:code` | `sparepart.view` |
-| GET | `/spareparts/:id/movements?from&to` | `inventory.view` |
+| GET | `/spareparts/:id/movements?from&to&page` | `inventory.view` |
+| GET | `/inventory/movements?sparepart_id&movement_type&outlet_id&from&to&page` | `inventory.view` |
 | POST | `/inventory/purchases` | `inventory.purchase` |
 | POST | `/inventory/adjustments` | `inventory.adjust` |
 | GET | `/inventory/alerts` | `sparepart.view` |
 | GET | `/inventory/valuation` | `inventory.cost.view` |
-| GET | `/inventory/top-used?from&to` | `report.view` |
-| GET/POST | `/sparepart-categories` | `sparepart.view` / `sparepart.create` |
-| GET/POST/PATCH | `/suppliers` | `sparepart.view` / `sparepart.create` |
+| GET | `/inventory/top-used?from&to&limit` | `report.view` |
+| GET | `/sparepart-categories` | `sparepart.view` |
+| POST | `/sparepart-categories` | `sparepart.create` |
+| PATCH | `/sparepart-categories/:id` | `sparepart.update` |
+| GET | `/suppliers?q` | `sparepart.view` |
+| POST | `/suppliers` | `sparepart.create` |
+| PATCH | `/suppliers/:id` | `sparepart.update` |
 
-Pembelian:
+### 7.1 Master sparepart
+
+- `sku` dan `barcode` unik per tenant di antara sparepart yang belum dihapus.
+- `GET /spareparts/barcode/:code` mencocokkan barcode lalu SKU (fallback
+  scanner), hanya untuk sparepart yang belum dihapus.
+- `PATCH` mengubah sebagian field. String kosong pada `category_id`,
+  `supplier_id`, atau `barcode` menghapus relasi/nilai tersebut. `stock` tidak
+  dapat diubah lewat `PATCH`; gunakan pembelian atau penyesuaian.
+- `DELETE` adalah soft delete: sparepart hilang dari daftar/pencarian, tetapi
+  riwayat movement dan referensi servis lama tetap utuh.
+- `cost_price` dan `stock_value` bernilai `0` bila aktor tidak memiliki
+  `inventory.cost.view`. `unit_cost` pada movement juga disamarkan.
+
+### 7.2 Pembelian stok
 
 ```json
 {
@@ -486,18 +504,51 @@ Pembelian:
 }
 ```
 
-Respons memuat movement per item + stok baru. Harga modal sparepart diperbarui
-ke `unit_cost` terbaru (weighted average pasca-MVP; MVP harga terakhir — dicatat
-di movement).
+- Minimal satu item; sparepart duplikat dalam satu request ditolak.
+- Semua baris memakai satu `reference_id` dengan `reference_type = purchase`
+  dan movement `purchase_in`.
+- Stok bertambah sebesar `qty`; `cost_price` sparepart diperbarui ke
+  `unit_cost` terbaru (MVP harga terakhir, weighted average pasca-MVP).
+- `purchased_at` opsional (RFC3339, default sekarang) dan menjadi waktu
+  movement.
+- Respons memuat `reference_id`, `total_cost`, dan movement per item.
 
-Penyesuaian:
+### 7.3 Penyesuaian stok (opname)
 
 ```json
 { "sparepart_id": "...", "new_stock": 8,
   "reason": "Hasil opname mingguan", "notes": "" }
 ```
 
-Stok negatif ditolak `CHECK`/service.
+- `new_stock` adalah stok fisik hasil hitung, bukan delta.
+- Movement `adjustment_in`/`adjustment_out` dengan `reference_type = opname`
+  dan alasan wajib. Stok negatif ditolak validasi/`CHECK`.
+- Jika `new_stock` sama dengan stok saat ini → `409 STOCK_UNCHANGED`.
+
+### 7.4 Riwayat movement
+
+- Movement bersifat append-only dan selalu memiliki `outlet_id`, pelaku, serta
+  stok sebelum/sesudah.
+- Filter `from`/`to` menerima `YYYY-MM-DD` (zona Asia/Jakarta) atau RFC3339.
+- Aktor non-owner/admin hanya melihat movement dari outlet yang dapat diakses.
+- Tipe: `initial`, `purchase_in`, `service_out`, `service_return`,
+  `adjustment_in`, `adjustment_out`, `transfer_in`, `transfer_out`.
+
+### 7.5 Alert, valuasi, dan pemakaian
+
+- `GET /inventory/alerts` mengembalikan sparepart aktif dengan
+  `stock <= min_stock`, diurutkan berdasarkan kekurangan terbesar.
+- `GET /inventory/valuation` menghitung
+  `total_value = Σ(stock × cost_price)` untuk sparepart aktif.
+- `GET /inventory/top-used` meranking pemakaian `service_out`; default 30 hari
+  terakhir dan `limit` 1–50 (default 10).
+
+### 7.6 Kategori & supplier
+
+- Kategori unik per tenant berdasarkan nama (case-insensitive).
+- Supplier mendukung pencarian nama/kontak/telepon dan soft delete tidak
+  diekspos pada tahap ini.
+- `PATCH` kategori/supplier memerlukan `sparepart.update`.
 
 ---
 

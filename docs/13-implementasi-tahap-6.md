@@ -252,12 +252,14 @@ Batasan yang disengaja pada tahap ini:
 
 - Validasi pickup wajib lunas, override owner, aktivasi garansi, dan notifikasi
   WhatsApp belum diimplementasikan; akan ditangani pada Tahap 8–9.
-- Filter "teknisi hanya melihat order yang ditugaskan" menunggu pengaturan
-  tenant pada Tahap 10.
+- Filter "teknisi hanya melihat order yang ditugaskan" sudah aktif melalui
+  `business_settings.technician_sees_only_assigned` dan diterapkan pada daftar
+  serta detail servis.
 - Foto before/after/testing memakai dialog upload Tahap 5; belum ada galeri
   khusus per tahap pengerjaan.
 - E2E Playwright dan uji konkurensi stok yang lebih berat dijadwalkan Tahap 11.
 
 Tahap berikutnya adalah **Tahap 7 — Inventori Sparepart Lengkap**: CRUD
 sparepart/kategori/supplier, pembelian stok, opname, riwayat movement, alert
-stok minimum, dan valuasi inventori.
+stok minimum, dan valuasi inventori. Tahap 7 telah selesai; lihat
+[`14 — Implementasi Tahap 7`](14-implementasi-tahap-7.md).

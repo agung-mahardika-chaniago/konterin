@@ -4,9 +4,9 @@ Aplikasi manajemen usaha servis HP untuk teknisi, toko servis, dan usaha reparas
 Dirancang sebagai **modular monolith** yang siap dikembangkan menjadi produk SaaS
 multi-tenant dan multi-outlet.
 
-> **Status proyek: Tahap 6 — Diagnosis, Pengerjaan, Status Machine & Item Jasa/Part (selesai).**
-> Tahap 7 (inventori sparepart lengkap) berikutnya.
-> Rincian implementasi: [`docs/13-implementasi-tahap-6.md`](docs/13-implementasi-tahap-6.md).
+> **Status proyek: Tahap 7 — Inventori Sparepart Lengkap (selesai, v0.7.0).**
+> Tahap 8 (invoice, kasir & pembayaran) berikutnya.
+> Rincian implementasi: [`docs/14-implementasi-tahap-7.md`](docs/14-implementasi-tahap-7.md).
 
 ---
 
@@ -57,7 +57,8 @@ Penjelasan lengkap: [`docs/04-struktur-folder.md`](docs/04-struktur-folder.md).
 | [11 — Implementasi Tahap 4](docs/11-implementasi-tahap-4.md) | App shell, dashboard data nyata, grafik, alert, PWA, hasil test |
 | [12 — Implementasi Tahap 5](docs/12-implementasi-tahap-5.md) | Modul servis intake, pelanggan, kredensial terenkripsi, foto, cetak label |
 | [13 — Implementasi Tahap 6](docs/13-implementasi-tahap-6.md) | Diagnosis, status machine 10 status, item jasa/sparepart, mutasi stok, penugasan teknisi |
-| [OpenAPI Tahap 6](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, health |
+| [14 — Implementasi Tahap 7](docs/14-implementasi-tahap-7.md) | Master sparepart, kategori/supplier, pembelian, opname, movement, alert, valuasi, barcode |
+| [OpenAPI Tahap 7](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, inventori, health |
 
 ## 4. Cara Menjalankan (Development)
 
@@ -131,7 +132,9 @@ Sesi bertahan saat halaman dimuat ulang tanpa menyimpan access token di
 peringatan, dan aktivitas teknisi dari database. Outlet dapat diganti dari
 switcher di topbar (multi-outlet). Halaman detail servis menyediakan stepper
 status, form diagnosis, editor item jasa/sparepart dengan pencarian stok, dan
-dialog penugasan teknisi; tombol aksi mengikuti permission pengguna.
+dialog penugasan teknisi; tombol aksi mengikuti permission pengguna. Modul
+inventori menyediakan halaman sparepart (filter, alert, valuasi), detail dengan
+riwayat stok, form pembelian multi-baris, dan riwayat pergerakan stok global.
 
 Pemeriksaan frontend:
 

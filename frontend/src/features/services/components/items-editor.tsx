@@ -397,7 +397,7 @@ function ItemFormDialog({ open, onOpenChange, orderId, item, onSaved }: ItemForm
                       <Input
                         value={spQuery}
                         onChange={(event) => setSpQuery(event.target.value)}
-                        placeholder="Ketik nama, SKU, atau tipe HP..."
+                        placeholder="Ketik/scan nama, SKU, barcode, atau tipe HP..."
                         className="pl-9"
                         autoFocus
                       />
