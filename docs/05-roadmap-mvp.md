@@ -222,6 +222,11 @@ frontend/src/features/print/label.tsx
 - [ ] Label tercetak rapi di 58 mm dan 80 mm.
 - [ ] Pelanggan duplikat ditolak dengan pesan jelas.
 
+> **Status:** implementasi selesai; acceptance otomatis (tiket unik, PIN tidak
+> bocor, foto, filter, duplikat pelanggan) lulus. Verifikasi visual cetak label
+> dan pengukuran waktu input manual masih menjadi QA tersisa. Bukti ada di
+> [`12 — Implementasi Tahap 5`](12-implementasi-tahap-5.md).
+
 ---
 
 ### Tahap 6 — Diagnosis & Pengerjaan
@@ -248,12 +253,17 @@ frontend/src/features/services/components/{diagnosis-form,items-editor,
 8. Notifikasi internal untuk servis terlambat.
 
 **Acceptance**
-- [ ] Semua transisi ilegal ditolak dengan pesan jelas.
-- [ ] Stok berkurang tepat sekali; percobaan ganda tidak menggandakan.
-- [ ] Stok tidak cukup → 409, item tidak tersimpan.
-- [ ] Timeline menampilkan seluruh perubahan.
+- [x] Semua transisi ilegal ditolak dengan pesan jelas.
+- [x] Stok berkurang tepat sekali; percobaan ganda tidak menggandakan.
+- [x] Stok tidak cukup → 409, item tidak tersimpan.
+- [x] Timeline menampilkan seluruh perubahan.
 - [ ] Teknisi hanya melihat order yang ditugaskan (jika setting aktif).
-- [ ] Total item dihitung server, bukan klien.
+- [x] Total item dihitung server, bukan klien.
+
+> **Status:** selesai. Filter "hanya order yang ditugaskan" menunggu pengaturan
+> tenant pada Tahap 10; saat ini teknisi dapat melihat order satu outlet sesuai
+> matriks RBAC. Bukti implementasi dan hasil test ada di
+> [`13 — Implementasi Tahap 6`](13-implementasi-tahap-6.md).
 
 ---
 
@@ -525,13 +535,12 @@ perubahan status.
 
 ## 8. Langkah Berikutnya
 
-Tahap 4 selesai. Tahap 5 (penerimaan servis) dimulai dengan:
+Tahap 6 selesai. Tahap 7 (inventori sparepart lengkap) dimulai dengan:
 
-1. Modul `customer` dan `device`: CRUD, pencarian, normalisasi nomor, dan
-   penolakan duplikat.
-2. Form penerimaan servis lengkap dengan validasi server.
-3. Nomor tiket atomik + QR + label 58/80 mm.
-4. Upload foto intake dengan validasi MIME dan ukuran.
-5. Kredensial perangkat terenkripsi (write-only, reveal beraudit).
-6. Daftar servis (search, filter, pagination) dan halaman detail.
-7. Audit pembuatan servis + test integrasi isolasi tenant.
+1. CRUD sparepart, kategori, supplier, dan SKU/barcode unik.
+2. Pencarian lanjutan, filter kategori/stok menipis, dan pagination.
+3. Pembelian stok (`in`) dan opname (`adjustment`) dengan alasan.
+4. Riwayat pergerakan stok + filter.
+5. Alert minimum stock, nilai inventori, dan sparepart terlaris.
+6. Barcode scan pada form pemakaian (kamera/scanner).
+7. Import/export sparepart CSV (opsional).

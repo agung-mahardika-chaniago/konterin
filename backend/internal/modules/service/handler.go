@@ -511,6 +511,236 @@ func (h *Handler) Technicians(c *gin.Context) {
 	response.Success(c, items)
 }
 
+// ChangeStatus transitions a service order through the state machine.
+func (h *Handler) ChangeStatus(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var body ChangeStatusRequest
+	if err := validator.Bind(c, &body, map[string]string{
+		"Status": "status", "Notes": "notes", "CancelReason": "cancel_reason",
+	}); err != nil {
+		response.Error(c, err)
+		return
+	}
+	updated, err := h.service.ChangeStatus(c.Request.Context(), actor, orderID, body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, updated)
+}
+
+// AssignTechnician assigns an order to a technician and sets priority.
+func (h *Handler) AssignTechnician(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var body AssignTechnicianRequest
+	if err := validator.Bind(c, &body, map[string]string{
+		"TechnicianID": "technician_id", "Priority": "priority",
+	}); err != nil {
+		response.Error(c, err)
+		return
+	}
+	updated, err := h.service.AssignTechnician(c.Request.Context(), actor, orderID, body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, updated)
+}
+
+// GetDiagnostic fetches diagnosis findings.
+func (h *Handler) GetDiagnostic(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	item, err := h.service.GetDiagnostic(c.Request.Context(), actor, orderID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if item == nil {
+		response.Success(c, gin.H{})
+		return
+	}
+	response.Success(c, item)
+}
+
+// UpsertDiagnostic updates diagnosis findings.
+func (h *Handler) UpsertDiagnostic(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var body UpsertDiagnosticRequest
+	if err := validator.Bind(c, &body, map[string]string{
+		"Diagnosis": "diagnosis", "Findings": "findings", "ActionTaken": "action_taken",
+		"TestResult": "test_result", "TechnicianNotes": "technician_notes",
+		"EstimatedDoneAt": "estimated_done_at",
+	}); err != nil {
+		response.Error(c, err)
+		return
+	}
+	saved, err := h.service.UpsertDiagnostic(c.Request.Context(), actor, orderID, body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, saved)
+}
+
+// ListItems returns service charges and spareparts on an order.
+func (h *Handler) ListItems(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	items, err := h.service.ListItems(c.Request.Context(), actor, orderID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, items)
+}
+
+// AddItem attaches a service or sparepart item.
+func (h *Handler) AddItem(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var body AddServiceItemRequest
+	if err := validator.Bind(c, &body, map[string]string{
+		"ItemType": "item_type", "SparepartID": "sparepart_id", "Description": "description",
+		"Qty": "qty", "UnitPrice": "unit_price", "DiscountAmount": "discount_amount",
+		"WarrantyDays": "warranty_days",
+	}); err != nil {
+		response.Error(c, err)
+		return
+	}
+	created, err := h.service.AddItem(c.Request.Context(), actor, orderID, body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, created)
+}
+
+// DeleteItem removes a line item.
+func (h *Handler) DeleteItem(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	itemID, err := uuidParam(c, "itemId")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.service.DeleteItem(c.Request.Context(), actor, orderID, itemID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "Item servis berhasil dihapus."})
+}
+
+// UpdateItem edits a line item.
+func (h *Handler) UpdateItem(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	orderID, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	itemID, err := uuidParam(c, "itemId")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var body UpdateServiceItemRequest
+	if err := validator.Bind(c, &body, map[string]string{
+		"Description": "description", "Qty": "qty", "UnitPrice": "unit_price",
+		"DiscountAmount": "discount_amount", "WarrantyDays": "warranty_days",
+	}); err != nil {
+		response.Error(c, err)
+		return
+	}
+	updated, err := h.service.UpdateItem(c.Request.Context(), actor, orderID, itemID, body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, updated)
+}
+
+// SearchSpareparts finds spareparts to add to a service.
+func (h *Handler) SearchSpareparts(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	q := c.Query("q")
+	limit := parseInt(c.Query("limit"), 20)
+	items, err := h.service.SearchSpareparts(c.Request.Context(), actor, q, limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, items)
+}
+
 func actorFrom(c *gin.Context) (Actor, error) {
 	identity, ok := middleware.GetAuth(c)
 	if !ok {
@@ -525,6 +755,7 @@ func actorFrom(c *gin.Context) (Actor, error) {
 		TenantID:        tenantScope.TenantID,
 		Name:            identity.Name,
 		Role:            identity.Role,
+		Permissions:     identity.Permissions,
 		AllOutletAccess: tenantScope.AllOutletAccess,
 		OutletIDs:       tenantScope.OutletIDs,
 		ActiveOutletID:  tenantScope.ActiveOutletID,

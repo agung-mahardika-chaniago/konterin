@@ -92,6 +92,7 @@ Validasi field:
 | 409 | `CONFLICT` | Duplikat data |
 | 409 | `DUPLICATE_PHONE` | Nomor pelanggan sudah terdaftar |
 | 409 | `INSUFFICIENT_STOCK` | Stok tidak cukup |
+| 409 | `SPAREPART_INACTIVE` | Sparepart dinonaktifkan |
 | 409 | `OVERPAYMENT` | Pembayaran melebihi sisa |
 | 409 | `INVOICE_LOCKED` | Invoice tidak dapat diubah |
 | 409 | `INVALID_STATUS_TRANSITION` | Transisi status ilegal |
@@ -258,6 +259,7 @@ Normalisasi nomor: `08xx` → `628xx`; duplikat per tenant ditolak
 | POST | `/service-orders/:id/items` | `service.update` |
 | PATCH | `/service-orders/:id/items/:itemId` | `service.update` |
 | DELETE | `/service-orders/:id/items/:itemId` | `service.update` |
+| GET | `/spareparts/search?q&limit` | `service.view` |
 | GET | `/service-orders/:id/invoice` | `invoice.view` |
 
 ### 6.1 Create service order
@@ -314,16 +316,34 @@ PATCH /api/v1/service-orders/:id/status
 { "status": "in_progress", "notes": "Sparepart tiba" }
 ```
 
-Efek samping:
-- `in_progress` → set `started_at` jika null.
-- `completed` → set `completed_at`, kunci item (invoice dapat difinalisasi).
-- `ready_for_pickup` → validasi invoice diterbitkan, enqueue WA.
-- `picked_up` → validasi lunas/override, set `picked_up_at`, aktifkan garansi,
-  set `credential_purge_at`.
-- `cancelled` → wajib `reason`; kembalikan stok; void invoice belum dibayar.
+Status valid: `received`, `waiting_diagnosis`, `waiting_approval`,
+`waiting_part`, `in_progress`, `testing`, `completed`, `ready_for_pickup`,
+`picked_up`, `cancelled`. Transisi mengikuti peta BR-02; `picked_up` dan
+`cancelled` bersifat terminal.
 
-Respons memuat status baru + timeline ringkas. Transisi ilegal → 409
-`INVALID_STATUS_TRANSITION`.
+Aturan permission:
+- Semua transisi memerlukan `service.status`.
+- `cancelled` juga memerlukan `service.cancel` dan `cancel_reason` (atau
+  `notes`) yang tidak kosong.
+- Kasir hanya boleh melakukan `ready_for_pickup` dan `picked_up`.
+- Teknisi tidak memiliki `service.assign`/`service.cancel`; mereka hanya dapat
+  memindahkan status operasional.
+
+Efek samping:
+- `in_progress` → set `started_at` jika null; bila rollback dari `completed`,
+  `completed_at` dikosongkan.
+- `completed` → set `completed_at`.
+- `picked_up` → set `picked_up_at`, `completed_at`, dan `credential_purge_at`
+  (+30 hari).
+- `cancelled` → mengembalikan stok sparepart beserta movement `service_return`
+  dan mem-void invoice yang belum dibayar (`draft`/`unpaid`). Ditolak
+  `409 INVOICE_LOCKED` bila invoice sudah `partial`/`paid` atau
+  `paid_amount > 0`.
+
+Setiap perubahan menulis `service_status_history` dan audit
+`service_status_change`. Transisi ilegal → 409 `INVALID_STATUS_TRANSITION`.
+Validasi pickup wajib lunas, aktivasi garansi, dan notifikasi WA menyusul
+Tahap 8–9; saat ini transisi hanya mencatat timestamp.
 
 ### 6.3 Item servis
 
@@ -335,12 +355,33 @@ Respons memuat status baru + timeline ringkas. Transisi ilegal → 409
 // Sparepart
 { "item_type": "sparepart", "sparepart_id": "...", "qty": 1,
   "unit_price": 650000, "discount_amount": 0, "warranty_days": 90 }
+
+// Biaya manual
+{ "item_type": "custom", "description": "Ongkos kirim part",
+  "qty": 1, "unit_price": 25000, "discount_amount": 0 }
 ```
 
-- `unit_price` default dari harga jual; server menyimpan snapshot `cost_price`.
+- `item_type` = `service|sparepart|custom`; `qty` > 0, maks 9999. Qty
+  sparepart wajib bilangan bulat.
+- `unit_price` default harga jual untuk sparepart; untuk jasa/custom memakai
+  nilai yang dikirim.
+- Server menyimpan snapshot `cost_price`; nilai ini hanya dikembalikan bila
+  aktor memiliki `inventory.cost.view` (selain itu `0`).
 - Untuk sparepart, `description` opsional (diambil dari nama).
-- Menambah/menghapus sparepart memutasi stok + movement.
-- Item terkunci bila invoice sudah memiliki pembayaran atau sudah final.
+- `discount_amount` tidak boleh melebihi `qty × unit_price`.
+- Server menghitung `subtotal` per baris, lalu memperbarui
+  `subtotal_service`, `subtotal_part`, `total_amount` invoice `draft` dan
+  `estimated_cost` order. Klien tidak mengirim total.
+- Menambah sparepart memotong stok dengan `SELECT ... FOR UPDATE` dan movement
+  `service_out`; stok kurang → `409 INSUFFICIENT_STOCK` dan item tidak
+  tersimpan. Sparepart nonaktif → `409 SPAREPART_INACTIVE`.
+- `PATCH` mengubah sebagian field. Perubahan qty sparepart menyesuaikan stok
+  sebesar delta saja (tidak memotong ulang).
+- `DELETE` mengembalikan stok sparepart + movement `service_return`.
+- Item terkunci (`409 INVOICE_LOCKED`) bila invoice bukan `draft` atau sudah
+  memiliki pembayaran.
+- `GET /service-orders/:id` menyertakan `diagnostic` hanya untuk pemegang
+  `diagnosis.view` dan item dengan `cost_price` tersamarkan sesuai permission.
 
 ### 6.4 Kredensial perangkat
 
@@ -371,6 +412,44 @@ POST /api/v1/service-orders/:id/credential/reveal
 
 `multipart/form-data`: `file`, `stage` (`intake/before/after/testing/other`),
 `is_public` (opsional). Maks 5 MB, `image/jpeg|png|webp`.
+
+### 6.6 Diagnosis
+
+```http
+GET /api/v1/service-orders/:id/diagnostic
+PUT /api/v1/service-orders/:id/diagnostic
+```
+
+```json
+{
+  "diagnosis": "Korsleting pada IC power",
+  "findings": "Korosi di area charging IC",
+  "action_taken": "Pembersihan ultrasonik dan penggantian IC",
+  "test_result": "Belum dites ulang",
+  "technician_notes": "Perlu pengeringan 2 jam",
+  "estimated_done_at": "2026-11-08T10:00:00+07:00"
+}
+```
+
+- `GET` memerlukan `diagnosis.view`; bila belum diisi respons `data` berupa
+  objek kosong `{}`.
+- `PUT` memerlukan `diagnosis.manage`, bersifat upsert, dan menulis audit
+  `diagnostic_upsert`.
+- `estimated_done_at` memakai RFC3339 dan ikut disinkronkan ke
+  `service_orders.estimated_done_at`.
+- Diagnosis tidak disertakan pada detail servis bila aktor tidak memiliki
+  `diagnosis.view` (mis. kasir).
+
+### 6.7 Pencarian sparepart untuk item
+
+```http
+GET /api/v1/spareparts/search?q=LCD&limit=20
+```
+
+- Memerlukan `service.view`.
+- Mencari nama, SKU, atau model kompatibel pada sparepart aktif milik tenant.
+- `limit` 1–50 (default 20).
+- `cost_price` hanya terisi bila aktor memiliki `inventory.cost.view`.
 
 ---
 
@@ -706,6 +785,10 @@ POST /api/v1/service-orders/{id}/items
 POST /api/v1/service-orders/{id}/items
 { "item_type": "sparepart", "sparepart_id": "...", "qty": 1,
   "unit_price": 650000, "warranty_days": 90 }
+
+# Ubah qty item (stok sparepart menyesuaikan delta)
+PATCH /api/v1/service-orders/{id}/items/{item_id}
+{ "qty": 2 }
 
 # 5. Ubah status
 PATCH /api/v1/service-orders/{id}/status

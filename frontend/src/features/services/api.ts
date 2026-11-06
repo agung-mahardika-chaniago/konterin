@@ -1,14 +1,22 @@
 import { api, apiRequest } from '@/lib/api-client';
 import type { ApiEnvelope } from '@/types/api';
 import type {
+  AddServiceItemRequest,
+  AssignTechnicianRequest,
+  ChangeStatusRequest,
   CreateServiceRequest,
+  Diagnostic,
   ServiceFilter,
   ServiceOrderDetail,
+  ServiceOrderItem,
   ServiceOrderListItem,
   ServicePhoto,
+  SparepartOption,
   StatusHistoryEntry,
   TechnicianOption,
+  UpdateServiceItemRequest,
   UpdateServiceRequest,
+  UpsertDiagnosticRequest,
 } from './types';
 
 export async function listServiceOrders(filter: ServiceFilter = {}): Promise<ApiEnvelope<ServiceOrderListItem[]>> {
@@ -82,4 +90,59 @@ export async function deleteServicePhoto(orderId: string, photoId: string): Prom
 export async function getTechnicians(outletId?: string): Promise<TechnicianOption[]> {
   const query = outletId ? `?outlet_id=${outletId}` : '';
   return api.get<TechnicianOption[]>(`/technicians${query}`);
+}
+
+export async function changeServiceStatus(
+  orderId: string,
+  payload: ChangeStatusRequest,
+): Promise<ServiceOrderDetail> {
+  return api.patch<ServiceOrderDetail>(`/service-orders/${orderId}/status`, payload);
+}
+
+export async function assignTechnician(
+  orderId: string,
+  payload: AssignTechnicianRequest,
+): Promise<ServiceOrderDetail> {
+  return api.post<ServiceOrderDetail>(`/service-orders/${orderId}/assign`, payload);
+}
+
+export async function getDiagnostic(orderId: string): Promise<Diagnostic | null> {
+  return api.get<Diagnostic | null>(`/service-orders/${orderId}/diagnostic`);
+}
+
+export async function upsertDiagnostic(
+  orderId: string,
+  payload: UpsertDiagnosticRequest,
+): Promise<Diagnostic> {
+  return api.put<Diagnostic>(`/service-orders/${orderId}/diagnostic`, payload);
+}
+
+export async function listServiceItems(orderId: string): Promise<ServiceOrderItem[]> {
+  return api.get<ServiceOrderItem[]>(`/service-orders/${orderId}/items`);
+}
+
+export async function addServiceItem(
+  orderId: string,
+  payload: AddServiceItemRequest,
+): Promise<ServiceOrderItem> {
+  return api.post<ServiceOrderItem>(`/service-orders/${orderId}/items`, payload);
+}
+
+export async function updateServiceItem(
+  orderId: string,
+  itemId: string,
+  payload: UpdateServiceItemRequest,
+): Promise<ServiceOrderItem> {
+  return api.patch<ServiceOrderItem>(`/service-orders/${orderId}/items/${itemId}`, payload);
+}
+
+export async function deleteServiceItem(orderId: string, itemId: string): Promise<{ message: string }> {
+  return api.delete<{ message: string }>(`/service-orders/${orderId}/items/${itemId}`);
+}
+
+export async function searchSpareparts(q: string, limit = 20): Promise<SparepartOption[]> {
+  const params = new URLSearchParams();
+  if (q.trim()) params.set('q', q.trim());
+  params.set('limit', String(limit));
+  return api.get<SparepartOption[]>(`/spareparts/search?${params.toString()}`);
 }

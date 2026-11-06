@@ -4,9 +4,9 @@ Aplikasi manajemen usaha servis HP untuk teknisi, toko servis, dan usaha reparas
 Dirancang sebagai **modular monolith** yang siap dikembangkan menjadi produk SaaS
 multi-tenant dan multi-outlet.
 
-> **Status proyek: Tahap 5 — Modul Penerimaan Servis, Pelanggan, Foto & Label (selesai).**
-> Tahap 6 (diagnosis, pengerjaan, status machine, item jasa/part) berikutnya.
-> Rincian implementasi: [`docs/12-implementasi-tahap-5.md`](docs/12-implementasi-tahap-5.md).
+> **Status proyek: Tahap 6 — Diagnosis, Pengerjaan, Status Machine & Item Jasa/Part (selesai).**
+> Tahap 7 (inventori sparepart lengkap) berikutnya.
+> Rincian implementasi: [`docs/13-implementasi-tahap-6.md`](docs/13-implementasi-tahap-6.md).
 
 ---
 
@@ -56,7 +56,8 @@ Penjelasan lengkap: [`docs/04-struktur-folder.md`](docs/04-struktur-folder.md).
 | [10 — Implementasi Tahap 3](docs/10-implementasi-tahap-3.md) | Auth JWT, refresh rotation, RBAC, user management, frontend login, hasil test |
 | [11 — Implementasi Tahap 4](docs/11-implementasi-tahap-4.md) | App shell, dashboard data nyata, grafik, alert, PWA, hasil test |
 | [12 — Implementasi Tahap 5](docs/12-implementasi-tahap-5.md) | Modul servis intake, pelanggan, kredensial terenkripsi, foto, cetak label |
-| [OpenAPI Tahap 5](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, health |
+| [13 — Implementasi Tahap 6](docs/13-implementasi-tahap-6.md) | Diagnosis, status machine 10 status, item jasa/sparepart, mutasi stok, penugasan teknisi |
+| [OpenAPI Tahap 6](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, health |
 
 ## 4. Cara Menjalankan (Development)
 
@@ -128,7 +129,9 @@ Vite mem-proxy `/api` ke `http://127.0.0.1:8080`. Buka
 Sesi bertahan saat halaman dimuat ulang tanpa menyimpan access token di
 `localStorage`. Setelah login, dashboard menampilkan angka, grafik 7/30 hari,
 peringatan, dan aktivitas teknisi dari database. Outlet dapat diganti dari
-switcher di topbar (multi-outlet).
+switcher di topbar (multi-outlet). Halaman detail servis menyediakan stepper
+status, form diagnosis, editor item jasa/sparepart dengan pencarian stok, dan
+dialog penugasan teknisi; tombol aksi mengikuti permission pengguna.
 
 Pemeriksaan frontend:
 

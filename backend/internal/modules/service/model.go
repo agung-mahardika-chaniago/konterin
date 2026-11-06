@@ -32,9 +32,19 @@ type Actor struct {
 	TenantID        uuid.UUID
 	Name            string
 	Role            string
+	Permissions     map[string]struct{}
 	AllOutletAccess bool
 	OutletIDs       []uuid.UUID
 	ActiveOutletID  *uuid.UUID
+}
+
+// HasPermission reports whether the actor holds a permission code.
+func (a Actor) HasPermission(code string) bool {
+	if a.Permissions == nil {
+		return false
+	}
+	_, ok := a.Permissions[code]
+	return ok
 }
 
 // HasOutlet reports whether the actor may use the outlet.
@@ -298,19 +308,21 @@ type StoreRef struct {
 // ServiceOrderDetail is the full service-order payload.
 type ServiceOrderDetail struct {
 	ServiceOrderListItem
-	Completeness      *string              `json:"completeness"`
-	PhysicalCondition *string              `json:"physical_condition"`
-	Notes             *string              `json:"notes"`
-	InternalNotes     *string              `json:"internal_notes"`
-	CredentialType    string               `json:"credential_type"`
-	Photos            []ServicePhoto       `json:"photos"`
-	Timeline          []StatusHistoryEntry `json:"timeline"`
-	Invoice           *InvoiceRef          `json:"invoice"`
-	Store             StoreRef             `json:"store"`
-	PublicToken       *string              `json:"public_token"`
-	PublicTrackingURL *string              `json:"tracking_url"`
-	CreatedAt         time.Time            `json:"created_at"`
-	UpdatedAt         time.Time            `json:"updated_at"`
+	Completeness      *string               `json:"completeness"`
+	PhysicalCondition *string               `json:"physical_condition"`
+	Notes             *string               `json:"notes"`
+	InternalNotes     *string               `json:"internal_notes"`
+	CredentialType    string                `json:"credential_type"`
+	Photos            []ServicePhoto        `json:"photos"`
+	Timeline          []StatusHistoryEntry  `json:"timeline"`
+	Invoice           *InvoiceRef           `json:"invoice"`
+	Diagnostic        *DiagnosticDTO        `json:"diagnostic,omitempty"`
+	Items             []ServiceOrderItemDTO `json:"items,omitempty"`
+	Store             StoreRef              `json:"store"`
+	PublicToken       *string               `json:"public_token"`
+	PublicTrackingURL *string               `json:"tracking_url"`
+	CreatedAt         time.Time             `json:"created_at"`
+	UpdatedAt         time.Time             `json:"updated_at"`
 }
 
 // ServiceOrderCreated is returned by POST /service-orders.
@@ -350,4 +362,89 @@ type CustomerFilter struct {
 	Query   string
 	Page    int
 	PerPage int
+}
+
+// DiagnosticDTO is the API representation of a diagnosis record.
+type DiagnosticDTO struct {
+	ID              string     `json:"id"`
+	Diagnosis       *string    `json:"diagnosis"`
+	Findings        *string    `json:"findings"`
+	ActionTaken     *string    `json:"action_taken"`
+	TestResult      *string    `json:"test_result"`
+	TechnicianNotes *string    `json:"technician_notes"`
+	DiagnosedByID   *string    `json:"diagnosed_by_id,omitempty"`
+	DiagnosedBy     *string    `json:"diagnosed_by,omitempty"`
+	DiagnosedAt     *time.Time `json:"diagnosed_at"`
+	EstimatedDoneAt *time.Time `json:"estimated_done_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+// UpsertDiagnosticRequest is the payload to save diagnosis findings.
+type UpsertDiagnosticRequest struct {
+	Diagnosis       *string `json:"diagnosis" validate:"omitempty,max=2000"`
+	Findings        *string `json:"findings" validate:"omitempty,max=2000"`
+	ActionTaken     *string `json:"action_taken" validate:"omitempty,max=2000"`
+	TestResult      *string `json:"test_result" validate:"omitempty,max=2000"`
+	TechnicianNotes *string `json:"technician_notes" validate:"omitempty,max=2000"`
+	EstimatedDoneAt *string `json:"estimated_done_at"`
+}
+
+// ChangeStatusRequest is the payload to transition service status.
+type ChangeStatusRequest struct {
+	Status       string  `json:"status" validate:"required"`
+	Notes        *string `json:"notes" validate:"omitempty,max=1000"`
+	CancelReason *string `json:"cancel_reason" validate:"omitempty,max=1000"`
+}
+
+// AssignTechnicianRequest assigns a technician and optional priority.
+type AssignTechnicianRequest struct {
+	TechnicianID *string `json:"technician_id"`
+	Priority     *string `json:"priority" validate:"omitempty,oneof=normal express"`
+}
+
+// ServiceOrderItemDTO represents an item line (service or sparepart).
+type ServiceOrderItemDTO struct {
+	ID             string    `json:"id"`
+	ItemType       string    `json:"item_type"`
+	SparepartID    *string   `json:"sparepart_id,omitempty"`
+	Description    string    `json:"description"`
+	Qty            float64   `json:"qty"`
+	UnitPrice      int64     `json:"unit_price"`
+	CostPrice      int64     `json:"cost_price"`
+	DiscountAmount int64     `json:"discount_amount"`
+	Subtotal       int64     `json:"subtotal"`
+	WarrantyDays   int       `json:"warranty_days"`
+	AddedBy        *string   `json:"added_by,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// AddServiceItemRequest adds a service charge or sparepart line.
+type AddServiceItemRequest struct {
+	ItemType       string  `json:"item_type" validate:"required,oneof=service sparepart custom"`
+	SparepartID    *string `json:"sparepart_id"`
+	Description    string  `json:"description" validate:"omitempty,max=200"`
+	Qty            float64 `json:"qty" validate:"required,gt=0"`
+	UnitPrice      *int64  `json:"unit_price" validate:"omitempty,gte=0"`
+	DiscountAmount int64   `json:"discount_amount" validate:"gte=0"`
+	WarrantyDays   int     `json:"warranty_days" validate:"gte=0"`
+}
+
+// UpdateServiceItemRequest edits an existing line item.
+type UpdateServiceItemRequest struct {
+	Description    *string  `json:"description" validate:"omitempty,max=200"`
+	Qty            *float64 `json:"qty" validate:"omitempty,gt=0"`
+	UnitPrice      *int64   `json:"unit_price" validate:"omitempty,gte=0"`
+	DiscountAmount *int64   `json:"discount_amount" validate:"omitempty,gte=0"`
+	WarrantyDays   *int     `json:"warranty_days" validate:"omitempty,gte=0"`
+}
+
+// SparepartOption is returned when searching spareparts to add to a service.
+type SparepartOption struct {
+	ID        string `json:"id"`
+	SKU       string `json:"sku"`
+	Name      string `json:"name"`
+	Stock     int    `json:"stock"`
+	CostPrice int64  `json:"cost_price"`
+	SellPrice int64  `json:"sell_price"`
+	Location  string `json:"location"`
 }

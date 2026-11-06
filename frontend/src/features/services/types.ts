@@ -79,11 +79,90 @@ export interface ServiceOrderDetail extends ServiceOrderListItem {
   photos: ServicePhoto[];
   timeline: StatusHistoryEntry[];
   invoice?: InvoiceRef | null;
+  diagnostic?: Diagnostic | null;
+  items?: ServiceOrderItem[];
   store: StoreRef;
   public_token?: string | null;
   tracking_url?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Diagnostic {
+  id: string;
+  diagnosis: string | null;
+  findings: string | null;
+  action_taken: string | null;
+  test_result: string | null;
+  technician_notes: string | null;
+  diagnosed_by_id?: string | null;
+  diagnosed_by?: string | null;
+  diagnosed_at: string | null;
+  estimated_done_at: string | null;
+  updated_at: string;
+}
+
+export interface ServiceOrderItem {
+  id: string;
+  item_type: 'service' | 'sparepart' | 'custom' | string;
+  sparepart_id?: string | null;
+  description: string;
+  qty: number;
+  unit_price: number;
+  cost_price: number;
+  discount_amount: number;
+  subtotal: number;
+  warranty_days: number;
+  added_by?: string | null;
+  created_at: string;
+}
+
+export interface SparepartOption {
+  id: string;
+  sku: string;
+  name: string;
+  stock: number;
+  cost_price: number;
+  sell_price: number;
+  location: string;
+}
+
+export interface ChangeStatusRequest {
+  status: string;
+  notes?: string | null;
+  cancel_reason?: string | null;
+}
+
+export interface AssignTechnicianRequest {
+  technician_id?: string | null;
+  priority?: 'normal' | 'express';
+}
+
+export interface UpsertDiagnosticRequest {
+  diagnosis?: string | null;
+  findings?: string | null;
+  action_taken?: string | null;
+  test_result?: string | null;
+  technician_notes?: string | null;
+  estimated_done_at?: string | null;
+}
+
+export interface AddServiceItemRequest {
+  item_type: 'service' | 'sparepart' | 'custom';
+  sparepart_id?: string | null;
+  description?: string;
+  qty: number;
+  unit_price?: number | null;
+  discount_amount?: number;
+  warranty_days?: number;
+}
+
+export interface UpdateServiceItemRequest {
+  description?: string;
+  qty?: number;
+  unit_price?: number;
+  discount_amount?: number;
+  warranty_days?: number;
 }
 
 export interface ServiceOrderCreated {

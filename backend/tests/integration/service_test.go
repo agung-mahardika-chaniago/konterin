@@ -736,7 +736,7 @@ func TestServicePhotoUploadValidationAndDelete(t *testing.T) {
 
 	// Photo exceeding the 5 MB limit (but small enough to pass the 6 MB
 	// multipart body limit) → 413 PAYLOAD_TOO_LARGE.
-	oversize := 5 * 1024 * 1024 + (900 * 1024)
+	oversize := 5*1024*1024 + (900 * 1024)
 	big := app.multipartRequest(t, http.MethodPost, "/api/v1/service-orders/"+orderID+"/photos",
 		ownerToken, nil, "file", "big.png",
 		append(append([]byte{}, pngHeader...), bytes.Repeat([]byte{0}, oversize)...))

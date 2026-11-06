@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  ArrowRightCircle,
   Camera,
   Clock,
   Copy,
@@ -15,6 +16,7 @@ import {
   Trash2,
   Unlock,
   User,
+  UserCog,
   Wallet,
 } from 'lucide-react';
 
@@ -26,18 +28,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/features/dashboard/format';
 import { PrintLabelModal } from '@/features/print/print-label-modal';
+import { hasPermission } from '@/lib/permissions';
+import { useAuthStore } from '@/stores/auth-store';
 import { deleteServicePhoto, getServiceOrder } from '../api';
+import { AssignTechnicianDialog } from '../components/assign-technician-dialog';
 import { CredentialFormDialog } from '../components/credential-form-dialog';
 import { CredentialRevealDialog } from '../components/credential-reveal-dialog';
+import { DiagnosisForm } from '../components/diagnosis-form';
+import { ItemsEditor } from '../components/items-editor';
 import { PhotoUploadDialog } from '../components/photo-upload-dialog';
 import { PriorityBadge } from '../components/priority-badge';
 import { ServiceEditDialog } from '../components/service-edit-dialog';
 import { StatusBadge } from '../components/status-badge';
+import { StatusChangeDialog } from '../components/status-change-dialog';
+import { StatusStepper } from '../components/status-stepper';
+import { isTerminalStatus } from '../status-flow';
 import type { ServiceOrderDetail, ServicePhoto } from '../types';
 
 export function ServiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
 
   const [order, setOrder] = React.useState<ServiceOrderDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -50,6 +61,8 @@ export function ServiceDetailPage() {
   const [credentialFormOpen, setCredentialFormOpen] = React.useState(false);
   const [credentialRevealOpen, setCredentialRevealOpen] = React.useState(false);
   const [photoUploadOpen, setPhotoUploadOpen] = React.useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = React.useState(false);
 
   const loadOrder = React.useCallback(async () => {
     if (!id) return;
@@ -125,6 +138,12 @@ export function ServiceDetailPage() {
   );
   const waUrl = `https://wa.me/${waPhone}?text=${waMessage}`;
 
+  const canChangeStatus = hasPermission(user, 'service.status') && !isTerminalStatus(order.status);
+  const canAssign = hasPermission(user, 'service.assign');
+  const canManageDiagnosis = hasPermission(user, 'diagnosis.manage');
+  const canViewDiagnosis = canManageDiagnosis || hasPermission(user, 'diagnosis.view');
+  const canUpdateItems = hasPermission(user, 'service.update');
+
   return (
     <div className="space-y-6 pb-12">
       {/* Top Header & Quick Actions */}
@@ -161,6 +180,12 @@ export function ServiceDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canChangeStatus && (
+            <Button size="sm" onClick={() => setStatusDialogOpen(true)} className="gap-1.5 shadow-sm">
+              <ArrowRightCircle className="h-4 w-4" aria-hidden="true" />
+              Ubah Status
+            </Button>
+          )}
           <a href={waUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm" className="gap-1.5 text-emerald-700 hover:text-emerald-800">
               <MessageCircle className="h-4 w-4" aria-hidden="true" />
@@ -177,6 +202,20 @@ export function ServiceDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Status Stepper */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <div>
+            <CardTitle className="text-sm font-semibold">Progres Pengerjaan</CardTitle>
+            <p className="text-xs text-muted">Alur status servis dari penerimaan hingga serah terima.</p>
+          </div>
+          <StatusBadge status={order.status} />
+        </CardHeader>
+        <CardContent>
+          <StatusStepper status={order.status} />
+        </CardContent>
+      </Card>
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -274,6 +313,24 @@ export function ServiceDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Diagnosis & Repair Items */}
+          {canViewDiagnosis && (
+            <DiagnosisForm
+              orderId={order.id}
+              diagnostic={order.diagnostic ?? null}
+              canManage={canManageDiagnosis}
+              onSaved={(diagnostic) => setOrder((current) => (current ? { ...current, diagnostic } : current))}
+            />
+          )}
+
+          <ItemsEditor
+            orderId={order.id}
+            items={order.items ?? []}
+            invoice={order.invoice}
+            canUpdate={canUpdateItems}
+            onChanged={loadOrder}
+          />
 
           {/* Kredensial Perangkat (Write-Only & Audited Reveal) */}
           <Card>
@@ -472,6 +529,28 @@ export function ServiceDetailPage() {
                   </p>
                 </div>
               )}
+
+              {(canChangeStatus || canAssign) && (
+                <div className="space-y-2 border-t border-border pt-3">
+                  {canChangeStatus && (
+                    <Button size="sm" onClick={() => setStatusDialogOpen(true)} className="w-full gap-1.5">
+                      <ArrowRightCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      Ubah Status Servis
+                    </Button>
+                  )}
+                  {canAssign && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAssignDialogOpen(true)}
+                      className="w-full gap-1.5"
+                    >
+                      <UserCog className="h-3.5 w-3.5" aria-hidden="true" />
+                      Tugaskan Teknisi
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -559,6 +638,20 @@ export function ServiceDetailPage() {
         onOpenChange={setPhotoUploadOpen}
         orderId={order.id}
         onSuccess={() => loadOrder()}
+      />
+
+      <StatusChangeDialog
+        open={statusDialogOpen}
+        onOpenChange={setStatusDialogOpen}
+        order={order}
+        onSuccess={(updated) => setOrder(updated)}
+      />
+
+      <AssignTechnicianDialog
+        open={assignDialogOpen}
+        onOpenChange={setAssignDialogOpen}
+        order={order}
+        onSuccess={(updated) => setOrder(updated)}
       />
     </div>
   );

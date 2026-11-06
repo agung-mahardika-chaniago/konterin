@@ -555,6 +555,18 @@ func (s *Service) GetServiceOrder(ctx context.Context, actor Actor, id uuid.UUID
 	if err != nil {
 		return nil, apperror.Internal(err)
 	}
+	// Diagnosis notes are internal to roles with diagnosis.view.
+	var diagnostic *DiagnosticDTO
+	if actor.HasPermission("diagnosis.view") {
+		diagnostic, err = s.diagnosticForOrder(ctx, row.TenantID, id)
+		if err != nil {
+			return nil, apperror.Internal(err)
+		}
+	}
+	items, err := s.itemsForOrder(ctx, row.TenantID, id, actor.HasPermission("inventory.cost.view"))
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
 	store, err := s.storeFor(ctx, row.TenantID, row.OutletID)
 	if err != nil {
 		return nil, apperror.Internal(err)
@@ -570,6 +582,8 @@ func (s *Service) GetServiceOrder(ctx context.Context, actor Actor, id uuid.UUID
 		Photos:               photos,
 		Timeline:             timeline,
 		Invoice:              invoice,
+		Diagnostic:           diagnostic,
+		Items:                items,
 		Store:                store,
 		PublicToken:          row.PublicToken,
 		CreatedAt:            row.CreatedAt,

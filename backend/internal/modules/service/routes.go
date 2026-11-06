@@ -20,7 +20,19 @@ func RegisterRoutes(api *gin.RouterGroup, h *Handler, auth, tenant gin.HandlerFu
 	group.POST("/service-orders", can("service.create"), h.CreateServiceOrder)
 	group.GET("/service-orders/:id", can("service.view"), h.GetServiceOrder)
 	group.PATCH("/service-orders/:id", can("service.update"), h.UpdateServiceOrder)
+	group.PATCH("/service-orders/:id/status", can("service.status"), h.ChangeStatus)
+	group.POST("/service-orders/:id/assign", can("service.assign"), h.AssignTechnician)
 	group.GET("/service-orders/:id/timeline", can("service.view"), h.Timeline)
+
+	group.GET("/service-orders/:id/diagnostic", can("diagnosis.view"), h.GetDiagnostic)
+	group.PUT("/service-orders/:id/diagnostic", can("diagnosis.manage"), h.UpsertDiagnostic)
+
+	group.GET("/service-orders/:id/items", can("service.view"), h.ListItems)
+	group.POST("/service-orders/:id/items", can("service.update"), h.AddItem)
+	group.PATCH("/service-orders/:id/items/:itemId", can("service.update"), h.UpdateItem)
+	group.DELETE("/service-orders/:id/items/:itemId", can("service.update"), h.DeleteItem)
+
+	group.GET("/spareparts/search", can("service.view"), h.SearchSpareparts)
 
 	group.PUT("/service-orders/:id/credential", can("service.update"), h.SetCredential)
 	group.DELETE("/service-orders/:id/credential", can("service.update"), h.DeleteCredential)
