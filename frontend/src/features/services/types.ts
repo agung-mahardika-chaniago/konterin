@@ -131,6 +131,7 @@ export interface ChangeStatusRequest {
   status: string;
   notes?: string | null;
   cancel_reason?: string | null;
+  override_reason?: string | null;
 }
 
 export interface AssignTechnicianRequest {

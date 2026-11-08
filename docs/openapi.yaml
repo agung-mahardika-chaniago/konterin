@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
   title: FixPhone API
-  version: 0.6.0
+  version: 0.8.0
   description: |
-    Kontrak API FixPhone untuk Tahap 6: autentikasi, sesi, RBAC, pengguna,
+    Kontrak API FixPhone untuk Tahap 8: autentikasi, sesi, RBAC, pengguna,
     role, outlet, dashboard, pelanggan, intake servis HP, diagnosis, state
-    machine status, item jasa/sparepart, kredensial perangkat, dan dokumentasi
-    foto. Semua waktu memakai ISO-8601 UTC dan semua nominal uang berupa
-    integer rupiah.
+    machine status, item jasa/sparepart, kredensial perangkat, inventori,
+    invoice, kasir, pembayaran, dan pengeluaran. Semua waktu memakai ISO-8601
+    UTC dan semua nominal uang berupa integer rupiah.
 
     Tanggal dan rentang pada endpoint dashboard ditafsirkan pada timezone
     outlet aktif (`outlets.timezone`, default `Asia/Jakarta`).
@@ -26,6 +26,10 @@ tags:
   - name: Dashboard
   - name: Customers
   - name: ServiceOrders
+  - name: Inventory
+  - name: Invoices
+  - name: Payments
+  - name: Expenses
   - name: Meta
 
 paths:
@@ -1300,6 +1304,543 @@ paths:
               schema:
                 $ref: '#/components/schemas/TopUsedListEnvelope'
 
+  /invoices:
+    get:
+      tags: [Invoices]
+      summary: Daftar invoice pada outlet aktif
+      description: Memerlukan permission `invoice.view`.
+      parameters:
+        - name: q
+          in: query
+          description: Cari nomor invoice, tiket, nama, atau telepon pelanggan.
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisahkan koma.
+          schema:
+            type: string
+            example: unpaid,partial
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Tanggal dibuat (YYYY-MM-DD) pada timezone outlet.
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar invoice terpaginasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /invoices/{id}:
+    get:
+      tags: [Invoices]
+      summary: Detail invoice
+      description: Memerlukan permission `invoice.view`.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: Detail invoice beserta snapshot item, pembayaran, dan header toko.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDetailEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Invoices]
+      summary: Ubah diskon/catatan invoice draft
+      description: |
+        Memerlukan permission `invoice.update`. Total selalu dihitung ulang
+        server dari item servis. Invoice non-draft atau yang sudah memiliki
+        pembayaran ditolak `409 INVOICE_LOCKED`.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInvoiceRequest'
+      responses:
+        '200':
+          description: Invoice setelah perubahan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDetailEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /invoices/{id}/issue:
+    post:
+      tags: [Invoices]
+      summary: Finalisasi invoice draft
+      description: |
+        Memerlukan permission `invoice.create`. Menyalin item servis menjadi
+        snapshot `invoice_items`, menerapkan diskon, dan mengubah status menjadi
+        `unpaid` (atau `paid` bila total 0). Hanya dapat dilakukan sekali.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: Invoice hasil finalisasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDetailEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /invoices/{id}/void:
+    post:
+      tags: [Invoices]
+      summary: Batalkan invoice tanpa pembayaran
+      description: |
+        Memerlukan permission `invoice.void`. Ditolak `409 INVOICE_HAS_PAYMENT`
+        bila masih ada pembayaran posted; void pembayaran terlebih dahulu.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Invoice berstatus void.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDetailEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /invoices/{id}/print:
+    get:
+      tags: [Invoices]
+      summary: Data cetak invoice A4/struk
+      description: Memerlukan permission `invoice.view`.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: Payload cetak berisi detail invoice dan header toko.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePrintEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /service-orders/{id}/invoice:
+    get:
+      tags: [Invoices]
+      summary: Invoice yang tertaut ke servis
+      description: Memerlukan permission `invoice.view`.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Detail invoice untuk servis tersebut.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDetailEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /invoices/{id}/payments:
+    get:
+      tags: [Payments]
+      summary: Semua pembayaran pada invoice
+      description: Memerlukan permission `payment.view`.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: Daftar pembayaran posted dan void.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Payments]
+      summary: Terima pembayaran penuh atau DP
+      description: |
+        Memerlukan permission `payment.create`. Nominal tidak boleh melebihi
+        sisa tagihan (`409 OVERPAYMENT`). Kirim header `Idempotency-Key` agar
+        retry tidak membuat pembayaran ganda.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Kunci unik per tenant, maksimum 100 karakter.
+          schema:
+            type: string
+            maxLength: 100
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '201':
+          description: Pembayaran tercatat dan status invoice diperbarui.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMutationEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /payments:
+    get:
+      tags: [Payments]
+      summary: Daftar transaksi pembayaran
+      description: Memerlukan permission `payment.view`.
+      parameters:
+        - name: q
+          in: query
+          description: Cari nomor pembayaran, invoice, tiket, pelanggan, atau referensi.
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Satu atau beberapa status dipisahkan koma (`posted`/`void`).
+          schema:
+            type: string
+        - name: method
+          in: query
+          schema:
+            type: string
+            enum: [cash, bank_transfer, qris, card, other]
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Tanggal bayar (YYYY-MM-DD) pada timezone outlet.
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar pembayaran terpaginasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /payments/daily-summary:
+    get:
+      tags: [Payments]
+      summary: Rekap kasir harian
+      description: |
+        Memerlukan permission `payment.view`. Hanya menghitung pembayaran posted
+        pada tanggal tersebut; pembayaran void dilaporkan terpisah.
+      parameters:
+        - name: date
+          in: query
+          description: Tanggal laporan (YYYY-MM-DD), default hari ini pada timezone outlet.
+          schema:
+            type: string
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ringkasan penerimaan dan rekap per metode bayar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailySummaryEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /payments/{id}/void:
+    post:
+      tags: [Payments]
+      summary: Void pembayaran posted
+      description: |
+        Memerlukan permission `payment.void` (Owner/Admin). Status invoice
+        dihitung ulang menjadi `unpaid`/`partial`/`paid`; alasan wajib dan
+        dicatat pada audit log.
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Pembayaran void dan ringkasan invoice terbaru.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMutationEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /expenses:
+    get:
+      tags: [Expenses]
+      summary: Daftar pengeluaran
+      description: Memerlukan permission `expense.view`.
+      parameters:
+        - name: q
+          in: query
+          description: Cari nomor pengeluaran, deskripsi, atau kategori.
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Tanggal pengeluaran awal (YYYY-MM-DD).
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar pengeluaran terpaginasi beserta total nominal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+    post:
+      tags: [Expenses]
+      summary: Catat pengeluaran baru
+      description: Memerlukan permission `expense.create`. Nomor `EXP-YYMMDD-SEQ` dibuat atomik per outlet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExpenseRequest'
+      responses:
+        '201':
+          description: Pengeluaran tercatat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /expenses/{id}:
+    patch:
+      tags: [Expenses]
+      summary: Ubah pengeluaran
+      description: Memerlukan permission `expense.update`.
+      parameters:
+        - $ref: '#/components/parameters/ExpenseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExpenseRequest'
+      responses:
+        '200':
+          description: Pengeluaran setelah perubahan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Validation'
+    delete:
+      tags: [Expenses]
+      summary: Hapus pengeluaran (soft delete)
+      description: Memerlukan permission `expense.delete`.
+      parameters:
+        - $ref: '#/components/parameters/ExpenseId'
+      responses:
+        '200':
+          description: Pengeluaran dihapus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /expense-categories:
+    get:
+      tags: [Expenses]
+      summary: Daftar kategori pengeluaran
+      description: Memerlukan permission `expense.view`.
+      responses:
+        '200':
+          description: Kategori sistem dan kustom beserta jumlah pemakaian.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseCategoryListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Expenses]
+      summary: Tambah kategori pengeluaran
+      description: Memerlukan permission `expense.create`. Nama unik per tenant (case-insensitive).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCategoryRequest'
+      responses:
+        '201':
+          description: Kategori dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseCategoryEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1363,6 +1904,27 @@ components:
         type: string
         format: uuid
     SupplierId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InvoiceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PaymentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExpenseId:
       name: id
       in: path
       required: true
@@ -2906,3 +3468,644 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TopUsed'
+
+    InvoiceListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoice_no:
+          type: string
+        status:
+          type: string
+          enum: [draft, unpaid, partial, paid, void]
+        service_order_id:
+          type: string
+          format: uuid
+        ticket_no:
+          type: string
+        service_status:
+          type: string
+        customer_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+        customer_phone:
+          type: string
+        outlet_id:
+          type: string
+          format: uuid
+        outlet_name:
+          type: string
+        subtotal_service:
+          type: integer
+          format: int64
+        subtotal_part:
+          type: integer
+          format: int64
+        discount_type:
+          type: string
+          enum: [amount, percent]
+        discount_value:
+          type: integer
+          format: int64
+        discount_amount:
+          type: integer
+          format: int64
+        tax_amount:
+          type: integer
+          format: int64
+        total_amount:
+          type: integer
+          format: int64
+        paid_amount:
+          type: integer
+          format: int64
+        remaining_amount:
+          type: integer
+          format: int64
+        issued_at:
+          type: [string, 'null']
+          format: date-time
+        due_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    InvoiceItem:
+      type: object
+      description: Snapshot permanen item servis saat invoice difinalisasi.
+      properties:
+        id:
+          type: string
+          format: uuid
+        item_type:
+          type: string
+          enum: [service, sparepart, custom]
+        sparepart_id:
+          type: [string, 'null']
+          format: uuid
+        description:
+          type: string
+        qty:
+          type: number
+        unit_price:
+          type: integer
+          format: int64
+        cost_price:
+          type: integer
+          format: int64
+          description: 0 bila aktor tidak memiliki `inventory.cost.view`.
+        discount_amount:
+          type: integer
+          format: int64
+        subtotal:
+          type: integer
+          format: int64
+        warranty_days:
+          type: integer
+
+    InvoicePayment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        payment_no:
+          type: string
+        invoice_id:
+          type: string
+          format: uuid
+        invoice_no:
+          type: string
+        ticket_no:
+          type: string
+        customer_name:
+          type: string
+        method:
+          type: string
+          enum: [cash, bank_transfer, qris, card, other]
+        amount:
+          type: integer
+          format: int64
+        paid_at:
+          type: string
+          format: date-time
+        reference_no:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [posted, void]
+        received_by:
+          type: [string, 'null']
+        voided_by:
+          type: [string, 'null']
+        voided_at:
+          type: [string, 'null']
+          format: date-time
+        void_reason:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+
+    InvoiceServiceOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_no:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        device_brand:
+          type: string
+        device_model:
+          type: string
+        device_imei:
+          type: [string, 'null']
+        device_color:
+          type: [string, 'null']
+        complaint:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: [string, 'null']
+          format: date-time
+        picked_up_at:
+          type: [string, 'null']
+          format: date-time
+        technician_name:
+          type: [string, 'null']
+        public_tracking_url:
+          type: [string, 'null']
+
+    InvoiceStore:
+      type: object
+      description: Header toko dari `business_settings` untuk cetak invoice/struk.
+      properties:
+        name:
+          type: string
+        legal_name:
+          type: [string, 'null']
+        logo_path:
+          type: [string, 'null']
+        address:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        email:
+          type: [string, 'null']
+        tax_id:
+          type: [string, 'null']
+        invoice_terms:
+          type: [string, 'null']
+        invoice_footer:
+          type: [string, 'null']
+        timezone:
+          type: string
+        receipt_paper_width:
+          type: integer
+        currency:
+          type: string
+
+    InvoiceDetail:
+      allOf:
+        - $ref: '#/components/schemas/InvoiceListItem'
+        - type: object
+          properties:
+            notes:
+              type: [string, 'null']
+            void_reason:
+              type: [string, 'null']
+            voided_by:
+              type: [string, 'null']
+            voided_at:
+              type: [string, 'null']
+              format: date-time
+            service_order:
+              $ref: '#/components/schemas/InvoiceServiceOrder'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/InvoiceItem'
+            payments:
+              type: array
+              items:
+                $ref: '#/components/schemas/InvoicePayment'
+            store:
+              $ref: '#/components/schemas/InvoiceStore'
+
+    InvoiceDetailEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/InvoiceDetail'
+
+    InvoiceListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceListItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    InvoicePrintEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            template:
+              type: string
+              example: invoice
+            paper:
+              type: string
+              example: A4
+            invoice:
+              $ref: '#/components/schemas/InvoiceDetail'
+
+    UpdateInvoiceRequest:
+      type: object
+      properties:
+        discount_type:
+          type: string
+          enum: [amount, percent]
+        discount_value:
+          type: integer
+          format: int64
+          minimum: 0
+        notes:
+          type: [string, 'null']
+          maxLength: 2000
+        due_at:
+          type: [string, 'null']
+          format: date-time
+
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+
+    CreatePaymentRequest:
+      type: object
+      required: [method]
+      properties:
+        method:
+          type: string
+          enum: [cash, bank_transfer, qris, card, other]
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+        paid_at:
+          type: [string, 'null']
+          format: date-time
+        reference_no:
+          type: [string, 'null']
+          maxLength: 80
+        notes:
+          type: [string, 'null']
+          maxLength: 1000
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        payment_no:
+          type: string
+          example: PAY-261108-0001
+        invoice_id:
+          type: string
+          format: uuid
+        invoice_no:
+          type: string
+        ticket_no:
+          type: string
+        customer_name:
+          type: string
+        customer_phone:
+          type: string
+        outlet_id:
+          type: string
+          format: uuid
+        outlet_name:
+          type: string
+        method:
+          type: string
+          enum: [cash, bank_transfer, qris, card, other]
+        amount:
+          type: integer
+          format: int64
+        paid_at:
+          type: string
+          format: date-time
+        reference_no:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [posted, void]
+        received_by:
+          type: [string, 'null']
+        voided_by:
+          type: [string, 'null']
+        voided_at:
+          type: [string, 'null']
+          format: date-time
+        void_reason:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+
+    PaymentListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    InvoiceSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoice_no:
+          type: string
+        status:
+          type: string
+          enum: [draft, unpaid, partial, paid, void]
+        total_amount:
+          type: integer
+          format: int64
+        paid_amount:
+          type: integer
+          format: int64
+        remaining_amount:
+          type: integer
+          format: int64
+
+    PaymentMutationEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            payment:
+              $ref: '#/components/schemas/Payment'
+            invoice:
+              $ref: '#/components/schemas/InvoiceSummary'
+
+    MethodSummary:
+      type: object
+      properties:
+        method:
+          type: string
+          enum: [cash, bank_transfer, qris, card, other]
+        amount:
+          type: integer
+          format: int64
+        count:
+          type: integer
+          format: int64
+
+    DailySummary:
+      type: object
+      properties:
+        date:
+          type: string
+          example: '2026-11-08'
+        outlet_id:
+          type: string
+          format: uuid
+        outlet_name:
+          type: string
+        total_amount:
+          type: integer
+          format: int64
+        posted_count:
+          type: integer
+          format: int64
+        invoice_count:
+          type: integer
+          format: int64
+        voided_amount:
+          type: integer
+          format: int64
+        voided_count:
+          type: integer
+          format: int64
+        methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/MethodSummary'
+
+    DailySummaryEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/DailySummary'
+
+    Expense:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        expense_no:
+          type: string
+          example: EXP-261108-0001
+        category_id:
+          type: string
+          format: uuid
+        category_name:
+          type: string
+        outlet_id:
+          type: string
+          format: uuid
+        outlet_name:
+          type: string
+        description:
+          type: string
+        amount:
+          type: integer
+          format: int64
+        expense_date:
+          type: string
+          format: date
+        method:
+          type: string
+          enum: [cash, bank_transfer, qris, other]
+        receipt_path:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ExpenseEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Expense'
+
+    ExpenseListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Expense'
+            total_amount:
+              type: integer
+              format: int64
+              description: Total nominal seluruh baris yang cocok dengan filter.
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CreateExpenseRequest:
+      type: object
+      required: [category_id, description, expense_date, method]
+      properties:
+        category_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+          maxLength: 200
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+        expense_date:
+          type: string
+          format: date
+        method:
+          type: string
+          enum: [cash, bank_transfer, qris, other]
+        notes:
+          type: [string, 'null']
+          maxLength: 1000
+
+    UpdateExpenseRequest:
+      type: object
+      properties:
+        category_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+          maxLength: 200
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+        expense_date:
+          type: string
+          format: date
+        method:
+          type: string
+          enum: [cash, bank_transfer, qris, other]
+        notes:
+          type: [string, 'null']
+          maxLength: 1000
+
+    ExpenseCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        is_system:
+          type: boolean
+        expense_count:
+          type: integer
+          format: int64
+
+    ExpenseCategoryEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ExpenseCategory'
+
+    ExpenseCategoryListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseCategory'
+
+    ExpenseCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 80

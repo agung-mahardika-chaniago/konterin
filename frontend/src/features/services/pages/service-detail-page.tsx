@@ -22,11 +22,11 @@ import {
 
 import { EmptyState } from '@/components/shared/empty-state';
 import { Alert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/features/dashboard/format';
+import { InvoiceStatusBadge } from '@/features/invoices/components/invoice-status-badge';
 import { PrintLabelModal } from '@/features/print/print-label-modal';
 import { hasPermission } from '@/lib/permissions';
 import { useAuthStore } from '@/stores/auth-store';
@@ -564,16 +564,33 @@ export function ServiceDetailPage() {
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-muted">Nomor Invoice</span>
-                  <span className="font-mono font-bold text-ink">{order.invoice.invoice_no}</span>
+                  <Link
+                    to={`/invoices/${order.invoice.id}`}
+                    className="font-mono font-bold text-accent-600 hover:underline"
+                  >
+                    {order.invoice.invoice_no}
+                  </Link>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-muted">Status Invoice</span>
-                  <Badge variant="neutral">{order.invoice.status}</Badge>
+                  <InvoiceStatusBadge status={order.invoice.status} />
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted">Sisa Tagihan</span>
+                  <span className="font-mono font-semibold text-amber-700">
+                    {formatCurrency(order.invoice.remaining_amount)}
+                  </span>
                 </div>
                 <div className="border-t border-border pt-2 flex justify-between items-center font-bold">
                   <span>Total Tagihan</span>
                   <span className="font-mono">{formatCurrency(order.invoice.total_amount)}</span>
                 </div>
+                <Link to={`/invoices/${order.invoice.id}`}>
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs">
+                    <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
+                    Buka Invoice & Pembayaran
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           )}

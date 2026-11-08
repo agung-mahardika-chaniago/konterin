@@ -126,10 +126,51 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 			"cancel_reason": "Alasan pembatalan wajib diisi.",
 		})
 	}
+	overrideReason := ""
+	if input.OverrideReason != nil {
+		overrideReason = strings.TrimSpace(*input.OverrideReason)
+	}
 
 	now := time.Now().UTC()
 
+	var pickupOverride bool
+	var pickupInvoiceTotal, pickupInvoicePaid int64
+	var pickupInvoiceNo string
+
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// A hand-over is only allowed when the invoice is settled. Owners may
+		// override the rule with a written reason that is stored in the audit
+		// log and the status history.
+		if targetStatus == "picked_up" {
+			var invoice struct {
+				InvoiceNo   string `gorm:"column:invoice_no"`
+				TotalAmount int64  `gorm:"column:total_amount"`
+				PaidAmount  int64  `gorm:"column:paid_amount"`
+			}
+			if err := tx.Raw(`
+				SELECT invoice_no, total_amount, paid_amount
+				FROM invoices
+				WHERE service_order_id = ? AND tenant_id = ?
+				FOR UPDATE`, orderID, tenantID).Scan(&invoice).Error; err != nil {
+				return apperror.Internal(err)
+			}
+			if invoice.InvoiceNo != "" && invoice.TotalAmount > invoice.PaidAmount {
+				if !actor.HasPermission("service.override_unpaid_pickup") {
+					return apperror.Conflict("UNPAID_PICKUP",
+						"Servis belum lunas. Selesaikan pembayaran terlebih dahulu atau minta Owner melakukan override.")
+				}
+				if overrideReason == "" {
+					return apperror.Validation(map[string]string{
+						"override_reason": "Alasan override pickup belum lunas wajib diisi.",
+					})
+				}
+				pickupOverride = true
+				pickupInvoiceTotal = invoice.TotalAmount
+				pickupInvoicePaid = invoice.PaidAmount
+				pickupInvoiceNo = invoice.InvoiceNo
+			}
+		}
+
 		// Update order status and timestamp side effects
 		query := `UPDATE service_orders SET status = ?, updated_by = ?, updated_at = ?`
 		args := []any{targetStatus, actorID(actor), now}
@@ -221,6 +262,13 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 		if targetStatus == "cancelled" && (historyNotes == nil || *historyNotes == "") {
 			historyNotes = &reason
 		}
+		if pickupOverride {
+			overrideNote := "Override pickup belum lunas: " + overrideReason
+			if historyNotes != nil && strings.TrimSpace(*historyNotes) != "" {
+				overrideNote = strings.TrimSpace(*historyNotes) + " | " + overrideNote
+			}
+			historyNotes = &overrideNote
+		}
 		if err := tx.Exec(`
 			INSERT INTO service_status_history (
 				id, tenant_id, service_order_id, from_status, to_status, notes, changed_by, created_at
@@ -230,7 +278,7 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 		}
 
 		// Audit log
-		return audit.Write(ctx, tx, audit.Entry{
+		if err := audit.Write(ctx, tx, audit.Entry{
 			TenantID:   &tenantID,
 			UserID:     actorID(actor),
 			ActorName:  actor.Name,
@@ -239,7 +287,29 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 			EntityType: "service_order",
 			EntityID:   &orderID,
 			After:      map[string]any{"from": currentStatus, "to": targetStatus, "notes": historyNotes},
-		})
+		}); err != nil {
+			return err
+		}
+		if pickupOverride {
+			return audit.Write(ctx, tx, audit.Entry{
+				TenantID:   &tenantID,
+				UserID:     actorID(actor),
+				ActorName:  actor.Name,
+				Action:     "service_pickup_override",
+				Module:     "service",
+				EntityType: "service_order",
+				EntityID:   &orderID,
+				After: map[string]any{
+					"invoice_no":       pickupInvoiceNo,
+					"total_amount":     pickupInvoiceTotal,
+					"paid_amount":      pickupInvoicePaid,
+					"remaining_amount": pickupInvoiceTotal - pickupInvoicePaid,
+					"reason":           overrideReason,
+					"approved_by":      actor.Name,
+				},
+			})
+		}
+		return nil
 	})
 
 	if err != nil {

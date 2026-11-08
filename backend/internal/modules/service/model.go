@@ -391,9 +391,10 @@ type UpsertDiagnosticRequest struct {
 
 // ChangeStatusRequest is the payload to transition service status.
 type ChangeStatusRequest struct {
-	Status       string  `json:"status" validate:"required"`
-	Notes        *string `json:"notes" validate:"omitempty,max=1000"`
-	CancelReason *string `json:"cancel_reason" validate:"omitempty,max=1000"`
+	Status         string  `json:"status" validate:"required"`
+	Notes          *string `json:"notes" validate:"omitempty,max=1000"`
+	CancelReason   *string `json:"cancel_reason" validate:"omitempty,max=1000"`
+	OverrideReason *string `json:"override_reason" validate:"omitempty,max=1000"`
 }
 
 // AssignTechnicianRequest assigns a technician and optional priority.

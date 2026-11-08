@@ -4,9 +4,9 @@ Aplikasi manajemen usaha servis HP untuk teknisi, toko servis, dan usaha reparas
 Dirancang sebagai **modular monolith** yang siap dikembangkan menjadi produk SaaS
 multi-tenant dan multi-outlet.
 
-> **Status proyek: Tahap 7 — Inventori Sparepart Lengkap (selesai, v0.7.0).**
-> Tahap 8 (invoice, kasir & pembayaran) berikutnya.
-> Rincian implementasi: [`docs/14-implementasi-tahap-7.md`](docs/14-implementasi-tahap-7.md).
+> **Status proyek: Tahap 8 — Invoice, Kasir & Pembayaran (selesai, v0.8.0).**
+> Tahap 9 (tracking publik, garansi & notifikasi) berikutnya.
+> Rincian implementasi: [`docs/15-implementasi-tahap-8.md`](docs/15-implementasi-tahap-8.md).
 
 ---
 
@@ -58,7 +58,8 @@ Penjelasan lengkap: [`docs/04-struktur-folder.md`](docs/04-struktur-folder.md).
 | [12 — Implementasi Tahap 5](docs/12-implementasi-tahap-5.md) | Modul servis intake, pelanggan, kredensial terenkripsi, foto, cetak label |
 | [13 — Implementasi Tahap 6](docs/13-implementasi-tahap-6.md) | Diagnosis, status machine 10 status, item jasa/sparepart, mutasi stok, penugasan teknisi |
 | [14 — Implementasi Tahap 7](docs/14-implementasi-tahap-7.md) | Master sparepart, kategori/supplier, pembelian, opname, movement, alert, valuasi, barcode |
-| [OpenAPI Tahap 7](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, inventori, health |
+| [15 — Implementasi Tahap 8](docs/15-implementasi-tahap-8.md) | Invoice draft/finalisasi, diskon, pembayaran & idempotency, void, kasir harian, cetak, pengeluaran, pickup lunas |
+| [OpenAPI Tahap 8](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, inventori, invoice, pembayaran, pengeluaran, health |
 
 ## 4. Cara Menjalankan (Development)
 
@@ -135,6 +136,11 @@ status, form diagnosis, editor item jasa/sparepart dengan pencarian stok, dan
 dialog penugasan teknisi; tombol aksi mengikuti permission pengguna. Modul
 inventori menyediakan halaman sparepart (filter, alert, valuasi), detail dengan
 riwayat stok, form pembelian multi-baris, dan riwayat pergerakan stok global.
+Modul kasir menyediakan ringkasan harian dan rekap metode bayar, daftar/detail
+invoice dengan diskon, finalisasi, pembayaran DP/lunas, void, cetak invoice A4
+dan struk thermal 58/80 mm, tombol WhatsApp, serta halaman pengeluaran dan
+kategori. Status pickup mengikuti aturan invoice lunas dengan override Owner
+yang tercatat.
 
 Pemeriksaan frontend:
 

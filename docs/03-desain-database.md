@@ -822,9 +822,12 @@ Immutable setelah invoice memiliki pembayaran atau `issued_at` terisi.
 | `voided_by` | uuid | NULL |
 | `voided_at` | timestamptz | NULL |
 | `void_reason` | text | NULL |
+| `idempotency_key` | varchar(100) | NULL; unik parsial per tenant |
 | `created_at` | timestamptz | |
 
-Index: `(tenant_id, outlet_id, paid_at DESC)`, `(invoice_id, status)`.
+Index: `(tenant_id, outlet_id, paid_at DESC)`, `(invoice_id, status)`, serta
+unique parsial `(tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL`
+(migrasi `000016_payment_idempotency`).
 
 #### `expense_categories`
 
@@ -1001,12 +1004,11 @@ COMMIT
 ```
 BEGIN
   SELECT * FROM invoices WHERE id=$1 AND tenant_id=$2 FOR UPDATE
-  IF invoice.status = 'void' THEN reject
+  IF invoice.status IN ('draft','void') THEN reject
   IF amount > remaining_amount THEN reject 409 OVERPAYMENT
-  INSERT payments (status='posted', payment_no=seq)
+  INSERT payments (status='posted', payment_no=seq, idempotency_key)
   UPDATE invoices SET paid_amount = paid_amount + amount,
-         status = CASE WHEN paid+qty = total THEN 'paid' ELSE 'partial' END
-  IF invoice.issued_at IS NULL THEN set issued_at = now()
+         status = CASE WHEN paid = total THEN 'paid' ELSE 'partial' END
   INSERT audit_logs
 COMMIT
 ```
@@ -1019,9 +1021,10 @@ tanpa panggilan HTTP di dalamnya (notifikasi via outbox).
 
 ### 6.5 Idempotensi
 
-- Endpoint mutasi uang menerima header `Idempotency-Key`; disimpan di
-  `idempotency_keys` (pasca-MVP) atau dicegah dengan unique `reference_no`
-  per invoice untuk metode non-tunai.
+- `POST /invoices/:id/payments` menerima header `Idempotency-Key` (opsional,
+  maksimal 100 karakter) yang disimpan pada `payments.idempotency_key`.
+- Unique index parsial `(tenant_id, idempotency_key)` membuat retry paralel
+  aman: permintaan kedua mengembalikan payment pertama tanpa baris baru.
 - Worker memproses outbox dengan `FOR UPDATE SKIP LOCKED` sehingga aman
   dijalankan lebih dari satu instance.
 
@@ -1103,7 +1106,8 @@ Urutan file `golang-migrate`:
 000013_notifications_whatsapp.up.sql
 000014_audit_logs.up.sql
 000015_indexes_constraints.up.sql
-000016_rls_policies.up.sql       -- Tahap 11
+000016_payment_idempotency.up.sql -- Idempotency-Key pembayaran (Tahap 8)
+000017_rls_policies.up.sql        -- Tahap 11
 ```
 
 Setiap migrasi memiliki file `.down.sql` yang benar-benar berfungsi pada

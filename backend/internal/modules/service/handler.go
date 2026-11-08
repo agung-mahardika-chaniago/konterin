@@ -526,6 +526,7 @@ func (h *Handler) ChangeStatus(c *gin.Context) {
 	var body ChangeStatusRequest
 	if err := validator.Bind(c, &body, map[string]string{
 		"Status": "status", "Notes": "notes", "CancelReason": "cancel_reason",
+		"OverrideReason": "override_reason",
 	}); err != nil {
 		response.Error(c, err)
 		return

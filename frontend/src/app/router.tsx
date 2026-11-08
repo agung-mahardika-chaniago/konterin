@@ -8,10 +8,14 @@ import { RequireAuth } from '@/features/auth/require-auth';
 import { CustomerDetailPage } from '@/features/customers/pages/customer-detail-page';
 import { CustomerListPage } from '@/features/customers/pages/customer-list-page';
 import { DashboardPage } from '@/features/dashboard/dashboard-page';
+import { ExpenseListPage } from '@/features/expenses/pages/expense-list-page';
 import { MovementListPage } from '@/features/inventory/pages/movement-list-page';
 import { PurchasePage } from '@/features/inventory/pages/purchase-page';
 import { SparepartDetailPage } from '@/features/inventory/pages/sparepart-detail-page';
 import { SparepartListPage } from '@/features/inventory/pages/sparepart-list-page';
+import { CashierPage } from '@/features/invoices/pages/cashier-page';
+import { InvoiceDetailPage } from '@/features/invoices/pages/invoice-detail-page';
+import { InvoiceListPage } from '@/features/invoices/pages/invoice-list-page';
 import { ServiceCreatePage } from '@/features/services/pages/service-create-page';
 import { ServiceDetailPage } from '@/features/services/pages/service-detail-page';
 import { ServiceListPage } from '@/features/services/pages/service-list-page';
@@ -162,6 +166,54 @@ export function AppRouter() {
             <PermissionGuard permission="inventory.purchase">
               <AppShell>
                 <PurchasePage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/cashier"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="payment.view">
+              <AppShell>
+                <CashierPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/invoices"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="invoice.view">
+              <AppShell>
+                <InvoiceListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/invoices/:id"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="invoice.view">
+              <AppShell>
+                <InvoiceDetailPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/expenses"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="expense.view">
+              <AppShell>
+                <ExpenseListPage />
               </AppShell>
             </PermissionGuard>
           </RequireAuth>

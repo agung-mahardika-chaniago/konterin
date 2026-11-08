@@ -13,8 +13,11 @@ import (
 	"fixphone/backend/internal/middleware"
 	"fixphone/backend/internal/modules/auth"
 	"fixphone/backend/internal/modules/dashboard"
+	"fixphone/backend/internal/modules/expense"
 	"fixphone/backend/internal/modules/inventory"
+	"fixphone/backend/internal/modules/invoice"
 	"fixphone/backend/internal/modules/outlet"
+	"fixphone/backend/internal/modules/payment"
 	servicemod "fixphone/backend/internal/modules/service"
 	"fixphone/backend/internal/modules/user"
 	"fixphone/backend/internal/pkg/jwtutil"
@@ -103,6 +106,9 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		AppBaseURL:     cfg.AppBaseURL,
 	})
 	inventoryModule := inventory.NewService(db)
+	invoiceModule := invoice.NewService(db)
+	paymentModule := payment.NewService(db)
+	expenseModule := expense.NewService(db)
 
 	authMiddleware := middleware.Auth(tokenManager, authService)
 	tenantMiddleware := middleware.Tenant(db)
@@ -123,6 +129,9 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		dashboard.RegisterRoutes(api, dashboard.NewHandler(dashboardService), authMiddleware, tenantMiddleware, can)
 		servicemod.RegisterRoutes(api, servicemod.NewHandler(serviceModule), authMiddleware, tenantMiddleware, can)
 		inventory.RegisterRoutes(api, inventory.NewHandler(inventoryModule), authMiddleware, tenantMiddleware, can)
+		invoice.RegisterRoutes(api, invoice.NewHandler(invoiceModule), authMiddleware, tenantMiddleware, can)
+		payment.RegisterRoutes(api, payment.NewHandler(paymentModule), authMiddleware, tenantMiddleware, can)
+		expense.RegisterRoutes(api, expense.NewHandler(expenseModule), authMiddleware, tenantMiddleware, can)
 	}
 
 	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {

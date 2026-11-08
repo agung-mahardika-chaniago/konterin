@@ -14,6 +14,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { formatCurrency } from '@/features/dashboard/format';
 import { ApiError } from '@/lib/api-client';
 import { hasPermission } from '@/lib/permissions';
 import { useAuthStore } from '@/stores/auth-store';
@@ -32,6 +33,7 @@ interface StatusChangeDialogProps {
 export function StatusChangeDialog({ open, onOpenChange, order, onSuccess }: StatusChangeDialogProps) {
   const user = useAuthStore((state) => state.user);
   const canCancel = hasPermission(user, 'service.cancel');
+  const canOverridePickup = hasPermission(user, 'service.override_unpaid_pickup');
   const targets = React.useMemo(
     () => allowedTransitionsFor(order.status, { role: user?.role, canCancel }),
     [order.status, user?.role, canCancel],
@@ -40,6 +42,7 @@ export function StatusChangeDialog({ open, onOpenChange, order, onSuccess }: Sta
   const [target, setTarget] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [cancelReason, setCancelReason] = React.useState('');
+  const [overrideReason, setOverrideReason] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -48,14 +51,26 @@ export function StatusChangeDialog({ open, onOpenChange, order, onSuccess }: Sta
     setTarget(targets[0] ?? '');
     setNotes('');
     setCancelReason('');
+    setOverrideReason('');
     setError(null);
   }, [open, targets]);
+
+  const pickupRemaining = order.invoice?.remaining_amount ?? 0;
+  const needsPickupOverride = target === 'picked_up' && pickupRemaining > 0;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!target) return;
     if (target === 'cancelled' && !cancelReason.trim()) {
       setError('Alasan pembatalan wajib diisi.');
+      return;
+    }
+    if (needsPickupOverride && !canOverridePickup) {
+      setError('Servis belum lunas. Hanya Owner yang dapat melakukan override pickup belum lunas.');
+      return;
+    }
+    if (needsPickupOverride && !overrideReason.trim()) {
+      setError('Alasan override pickup belum lunas wajib diisi.');
       return;
     }
     setLoading(true);
@@ -65,6 +80,7 @@ export function StatusChangeDialog({ open, onOpenChange, order, onSuccess }: Sta
         status: target,
         notes: notes.trim() || null,
         cancel_reason: target === 'cancelled' ? cancelReason.trim() : null,
+        override_reason: needsPickupOverride && canOverridePickup ? overrideReason.trim() : null,
       });
       onSuccess(updated);
       onOpenChange(false);
@@ -139,6 +155,39 @@ export function StatusChangeDialog({ open, onOpenChange, order, onSuccess }: Sta
                       className="mt-1"
                       required
                     />
+                  </div>
+                )}
+
+                {needsPickupOverride && (
+                  <Alert variant={canOverridePickup ? 'info' : 'error'}>
+                    <p className="font-semibold">Invoice belum lunas</p>
+                    <p className="mt-0.5 text-xs">
+                      {order.invoice?.invoice_no ? `Invoice ${order.invoice.invoice_no} · ` : ''}
+                      Sisa tagihan {formatCurrency(pickupRemaining)}.
+                      {canOverridePickup
+                        ? ' Sebagai Owner, Anda dapat melakukan override dengan alasan tertulis.'
+                        : ' Selesaikan pembayaran terlebih dahulu atau minta Owner melakukan override.'}
+                    </p>
+                  </Alert>
+                )}
+
+                {needsPickupOverride && canOverridePickup && (
+                  <div>
+                    <Label htmlFor="override-reason">
+                      Alasan Override Pickup <span className="text-danger">*</span>
+                    </Label>
+                    <Textarea
+                      id="override-reason"
+                      value={overrideReason}
+                      onChange={(event) => setOverrideReason(event.target.value)}
+                      placeholder="Contoh: pelanggan janji melunasi besok, unit dibutuhkan mendesak"
+                      rows={3}
+                      className="mt-1"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-muted">
+                      Override dicatat pada audit log dan riwayat status servis.
+                    </p>
                   </div>
                 )}
 

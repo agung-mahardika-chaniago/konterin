@@ -556,31 +556,61 @@ GET /api/v1/spareparts/search?q=LCD&limit=20
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/invoices?q&status&outlet_id&from&to&page` | `invoice.view` |
+| GET | `/invoices?q&status&outlet_id&from&to&page&per_page` | `invoice.view` |
 | GET | `/invoices/:id` | `invoice.view` |
 | PATCH | `/invoices/:id` | `invoice.update` |
 | POST | `/invoices/:id/issue` | `invoice.create` |
 | POST | `/invoices/:id/void` | `invoice.void` |
-| GET | `/invoices/:id/pdf` | `invoice.view` |
 | GET | `/invoices/:id/print` | `invoice.view` |
+| GET | `/service-orders/:id/invoice` | `invoice.view` |
 | GET | `/invoices/:id/payments` | `payment.view` |
 | POST | `/invoices/:id/payments` | `payment.create` |
-| GET | `/payments?from&to&method&page` | `payment.view` |
+| GET | `/payments?q&status&method&outlet_id&from&to&page&per_page` | `payment.view` |
 | GET | `/payments/daily-summary?date&outlet_id` | `payment.view` |
 | POST | `/payments/:id/void` | `payment.void` |
 
-### 8.1 Update invoice
+Status invoice: `draft`, `unpaid`, `partial`, `paid`, `void`.
 
-Hanya saat belum ada pembayaran dan belum final:
+### 8.1 Invoice draft otomatis
+
+Setiap service order baru otomatis membuat satu invoice berstatus `draft`
+dengan nomor mengikuti pengaturan invoice (default `INV-YYMMDD-SEQ`). Invoice
+draft belum dapat dibayar; nilainya baru dikunci saat finalisasi.
+
+`GET /service-orders/:id/invoice` memudahkan halaman detail servis membuka
+invoice tanpa mengetahui ID invoice.
+
+### 8.2 Update invoice (draft)
+
+Hanya saat invoice masih `draft`, belum memiliki pembayaran, dan
+`issued_at` masih kosong. Selain itu → `409 INVOICE_LOCKED`.
 
 ```json
 { "discount_type": "percent", "discount_value": 10,
   "notes": "Pelanggan langganan", "due_at": null }
 ```
 
-Total dihitung ulang server. Setelah ada pembayaran → `409 INVOICE_LOCKED`.
+- `discount_type`: `percent` atau `amount`.
+- `percent` maksimal 100; `amount` tidak boleh melebihi subtotal → `422`.
+- `due_at` menerima RFC3339; string kosong menghapus jatuh tempo.
+- Total selalu dihitung ulang server:
+  `total_amount = subtotal_service + subtotal_part − discount_amount`, pajak 0.
+- Diskon persen dibulatkan ke rupiah terdekat.
 
-### 8.2 Pembayaran
+### 8.3 Finalisasi invoice
+
+`POST /invoices/:id/issue` (permission `invoice.create`):
+
+- Hanya dapat dilakukan sekali dari status `draft` → selain itu
+  `409 INVOICE_NOT_DRAFT`.
+- Item `service_order_items` disalin menjadi snapshot immutable di
+  `invoice_items`; perubahan item setelah finalisasi tidak mengubah invoice.
+- Total dan diskon dihitung ulang; status menjadi `unpaid`.
+- Invoice bernilai total 0 langsung menjadi `paid`.
+- Snapshot item, total, dan status ditulis dalam satu transaksi + audit
+  `invoice_issue`.
+
+### 8.4 Pembayaran
 
 ```http
 POST /api/v1/invoices/:id/payments
@@ -611,13 +641,43 @@ Respons `201`:
 ```
 
 Aturan:
-- `amount > 0` dan ≤ sisa; jika melebihi → `409 OVERPAYMENT`.
-- `Idempotency-Key` sama mengembalikan respons pertama (tidak membuat payment baru).
-- Invoice `void` → `409`.
-- Void payment: `{ "reason": "..." }`, permission `payment.void`, status invoice
-  dihitung ulang, audit.
+- `method`: `cash`, `bank_transfer`, `qris`, `card`, atau `other`.
+- `amount > 0` dan ≤ sisa tagihan; jika melebihi → `409 OVERPAYMENT` dengan
+  `details.remaining_amount`. Invoice yang sudah lunas juga `409 OVERPAYMENT`.
+- `paid_at` opsional (RFC3339, default sekarang) dan menjadi dasar laporan
+  harian.
+- Invoice harus sudah difinalisasi (`INVOICE_NOT_ISSUED`) dan tidak `void`
+  (`INVOICE_VOID`).
+- `Idempotency-Key` opsional, maksimal 100 karakter. Permintaan ulang dengan
+  key yang sama mengembalikan payment pertama dengan HTTP `201` tanpa membuat
+  baris baru. Unique index parsial `(tenant_id, idempotency_key)` menjaga
+  retry paralel. Key yang sudah dipakai pada outlet yang tidak dapat diakses
+  aktor → `409 IDEMPOTENCY_KEY_CONFLICT`.
+- Status invoice dihitung otomatis: `partial` bila `paid_amount < total_amount`,
+  `paid` bila sudah menutup total.
+- Void payment: `{ "reason": "..." }`, permission `payment.void`. Payment
+  menjadi `void`, `paid_amount` dan status invoice dihitung ulang, lalu audit
+  `payment_void`. Payment yang sudah `void` → `409 PAYMENT_ALREADY_VOID`.
+- Void invoice hanya boleh bila belum ada pembayaran posted →
+  `409 INVOICE_HAS_PAYMENT`; invoice void dua kali → `409 INVOICE_ALREADY_VOID`.
 
-Format nomor pembayaran: `PAY-YYMMDD-SEQ`.
+Format nomor pembayaran: `PAY-YYMMDD-SEQ` (atomik per outlet per hari).
+
+### 8.5 Kasir harian, cetak, dan pickup
+
+- `GET /payments/daily-summary?date=YYYY-MM-DD&outlet_id=...` mengembalikan
+  `total_amount`, `posted_count`, `invoice_count`, `voided_amount`,
+  `voided_count`, dan rekap `methods` (`cash`, `bank_transfer`, `qris`,
+  `card`, `other`). Tanggal memakai zona waktu outlet; default hari ini.
+- `GET /invoices/:id/print` mengembalikan payload
+  `{ "template": "invoice", "paper": "A4", "invoice": { ... } }` yang dipakai
+  UI untuk mencetak invoice A4 serta struk thermal 58/80 mm. Tahap ini belum
+  menyediakan PDF dari server.
+- Status servis `picked_up` mensyaratkan invoice lunas (atau total 0).
+  Tanpa izin override → `409 UNPAID_PICKUP`. Owner/Admin dengan
+  `service.override_unpaid_pickup` wajib mengirim `override_reason` (jika
+  kosong → `422 VALIDATION_ERROR`); override dicatat sebagai audit
+  `service_pickup_override` dan dicatat pada riwayat status.
 
 ---
 
@@ -649,11 +709,53 @@ ke klaim, tanpa biaya default, dan menyalin data pelanggan/perangkat.
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/expenses?from&to&category_id&page` | `expense.view` |
+| GET | `/expenses?q&from&to&category_id&outlet_id&page&per_page` | `expense.view` |
 | POST | `/expenses` | `expense.create` |
 | PATCH | `/expenses/:id` | `expense.update` |
 | DELETE | `/expenses/:id` | `expense.delete` |
-| GET/POST | `/expense-categories` | `expense.view` / `expense.create` |
+| GET | `/expense-categories` | `expense.view` |
+| POST | `/expense-categories` | `expense.create` |
+
+Semua data terikat `tenant_id` dan outlet aktif; filter `from`/`to` memakai
+`expense_date` dengan format `YYYY-MM-DD`.
+
+### 10.1 Mencatat pengeluaran
+
+```json
+{
+  "category_id": "...",
+  "description": "Beli tinta printer struk",
+  "amount": 150000,
+  "expense_date": "2026-11-07",
+  "method": "cash",
+  "notes": "Nota terlampir"
+}
+```
+
+- `category_id` wajib milik tenant yang sama.
+- `description` wajib, maksimal 200 karakter; `amount > 0`.
+- `method`: `cash`, `bank_transfer`, `qris`, atau `other`.
+- Nomor dokumen otomatis `EXP-YYMMDD-SEQ` (atomik per outlet per hari).
+- Respons `201` memuat pengeluaran lengkap dengan nama kategori/outlet.
+- Daftar mengembalikan `items` dan `total_amount` sesuai filter, diurutkan
+  tanggal terbaru; soft delete tidak ditampilkan.
+
+### 10.2 Ubah & hapus
+
+- `PATCH /expenses/:id` bersifat parsial dan memvalidasi field yang dikirim.
+- `DELETE /expenses/:id` adalah soft delete; data hilang dari daftar/laporan
+  tetapi baris tetap tersimpan.
+- Setiap create/update/delete menulis audit log (`expense_create`,
+  `expense_update`, `expense_delete`).
+- Pengeluaran outlet lain → `404`.
+
+### 10.3 Kategori pengeluaran
+
+- `GET /expense-categories` mengembalikan kategori sistem dan kustom beserta
+  `expense_count` (hanya pengeluaran aktif).
+- `POST /expense-categories` menambah kategori kustom; nama unik per tenant
+  secara case-insensitive → `409 CATEGORY_EXISTS`.
+- Belum ada endpoint ubah/hapus kategori pada tahap ini.
 
 ---
 

@@ -2,6 +2,7 @@ import {
   Boxes,
   ClipboardList,
   LayoutDashboard,
+  Receipt,
   ReceiptText,
   Settings,
   ShieldCheck,
@@ -53,9 +54,9 @@ export const navGroups: NavGroup[] = [
   {
     label: 'Keuangan',
     items: [
-      { label: 'Kasir', icon: ReceiptText, permission: 'payment.create', stage: 8 },
-      { label: 'Invoice', icon: Wallet, permission: 'invoice.view', stage: 8 },
-      { label: 'Pengeluaran', icon: Wallet, permission: 'expense.view', stage: 9 },
+      { label: 'Kasir', to: '/cashier', icon: ReceiptText, permission: 'payment.view' },
+      { label: 'Invoice', to: '/invoices', icon: Wallet, permission: 'invoice.view' },
+      { label: 'Pengeluaran', to: '/expenses', icon: Receipt, permission: 'expense.view' },
       { label: 'Laporan', icon: ClipboardList, permission: 'report.view', stage: 9 },
     ],
   },

@@ -327,12 +327,17 @@ frontend/src/features/print/{invoice,receipt}.tsx
 9. CRUD pengeluaran dasar untuk laporan laba.
 
 **Acceptance**
-- [ ] Total invoice = item − diskon, dihitung server.
-- [ ] Pembayaran tidak bisa melebihi sisa tagihan.
-- [ ] DP menghasilkan status `partial` dan sisa benar.
-- [ ] Void mengembalikan status invoice dengan benar.
-- [ ] Invoice & struk tercetak tanpa elemen terpotong.
-- [ ] Pickup belum lunas ditolak kecuali override tercatat.
+- [x] Total invoice = item − diskon, dihitung server.
+- [x] Pembayaran tidak bisa melebihi sisa tagihan.
+- [x] DP menghasilkan status `partial` dan sisa benar.
+- [x] Void mengembalikan status invoice dengan benar.
+- [x] Invoice & struk tercetak tanpa elemen terpotong.
+- [x] Pickup belum lunas ditolak kecuali override tercatat.
+
+> **Status:** selesai (v0.8.0). Invoice draft otomatis, finalisasi snapshot,
+> diskon, pembayaran dengan idempotency, void, kasir harian, cetak A4/thermal,
+> pengeluaran, dan aturan pickup lunas sudah berjalan. Bukti implementasi ada
+> di [`15 - Implementasi Tahap 8`](15-implementasi-tahap-8.md).
 
 ---
 
@@ -540,11 +545,13 @@ perubahan status.
 
 ## 8. Langkah Berikutnya
 
-Tahap 7 selesai. Tahap 8 (invoice, kasir, dan pembayaran) dimulai dengan:
+Tahap 8 selesai. Tahap 9 (tracking publik, garansi, dan notifikasi) dimulai
+dengan:
 
-1. Invoice otomatis draft + finalisasi, diskon, dan snapshot item.
-2. Pembayaran tunai/transfer/QRIS/kartu, DP parsial, dan validasi overpay.
-3. Void pembayaran + alasan + audit.
-4. Status invoice otomatis dan aturan pickup wajib lunas.
-5. Cetak invoice A4, struk thermal, dan tombol WhatsApp.
-6. Laporan transaksi harian dan rekap metode bayar.
+1. Halaman publik `/track` (tiket + 4 digit HP) dan `/track/:token` dengan
+   whitelist field serta rate limit.
+2. QR pada label servis mengarah ke halaman tracking.
+3. Garansi otomatis saat pickup, daftar/detail garansi, klaim, dan rework order.
+4. Notifikasi in-app + outbox WhatsApp dengan adapter `noop`/`fonnte`/`wablas`.
+5. Tombol "Chat via WhatsApp" (deep link) yang berfungsi.
+6. Worker reminder servis, pickup, dan garansi; purge kredensial 30 hari.
