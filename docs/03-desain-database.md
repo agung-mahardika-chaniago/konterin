@@ -913,7 +913,7 @@ Index: `(user_id, is_read, created_at DESC)`.
 | `service_order_id` | uuid FK NULL | |
 | `customer_id` | uuid FK NULL | |
 | `phone` | varchar(30) | Tujuan |
-| `template_key` | varchar(50) | `status_update`, `ready_pickup`, `invoice`, `reminder`, `warranty` |
+| `template_key` | varchar(50) | `status_update`, `ready_pickup`, `invoice`, `reminder`, `warranty`, `claim_received` |
 | `payload` | jsonb | Variabel template |
 | `body` | text | Hasil render |
 | `status` | varchar(15) | `queued/processing/sent/failed/cancelled` |
@@ -1107,7 +1107,8 @@ Urutan file `golang-migrate`:
 000014_audit_logs.up.sql
 000015_indexes_constraints.up.sql
 000016_payment_idempotency.up.sql -- Idempotency-Key pembayaran (Tahap 8)
-000017_rls_policies.up.sql        -- Tahap 11
+000017_tracking_warranty_notifications.up.sql -- Tracking, klaim/rework, read receipt, dedupe (Tahap 9)
+000018_rls_policies.up.sql        -- Tahap 11
 ```
 
 Setiap migrasi memiliki file `.down.sql` yang benar-benar berfungsi pada

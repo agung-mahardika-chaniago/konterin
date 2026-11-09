@@ -734,6 +734,71 @@ func (s *Service) UpdateServiceOrder(ctx context.Context, actor Actor, id uuid.U
 	return s.GetServiceOrder(ctx, actor, id)
 }
 
+// PublicLink returns (and regenerates when expired) the public tracking link.
+func (s *Service) PublicLink(ctx context.Context, actor Actor, orderID uuid.UUID) (*PublicLink, error) {
+	tenantID, err := actorTenant(actor)
+	if err != nil {
+		return nil, err
+	}
+	var row struct {
+		ID          uuid.UUID  `gorm:"column:id"`
+		OutletID    uuid.UUID  `gorm:"column:outlet_id"`
+		TicketNo    string     `gorm:"column:ticket_no"`
+		PublicToken *string    `gorm:"column:public_token"`
+		ExpiresAt   *time.Time `gorm:"column:public_token_expires_at"`
+		PickedUpAt  *time.Time `gorm:"column:picked_up_at"`
+	}
+	if err := s.db.WithContext(ctx).Raw(`
+		SELECT id, outlet_id, ticket_no, public_token, public_token_expires_at, picked_up_at
+		FROM service_orders WHERE id = ? AND tenant_id = ?`, orderID, tenantID).Scan(&row).Error; err != nil {
+		return nil, apperror.Internal(err)
+	}
+	if row.ID == uuid.Nil {
+		return nil, apperror.NotFound("Servis tidak ditemukan.")
+	}
+	if !actor.HasOutlet(row.OutletID) {
+		return nil, apperror.Forbidden("OUTLET_FORBIDDEN", "Anda tidak memiliki akses ke outlet ini.")
+	}
+
+	now := time.Now().UTC()
+	token := ""
+	if row.PublicToken != nil {
+		token = strings.TrimSpace(*row.PublicToken)
+	}
+	expires := now
+	if row.ExpiresAt != nil {
+		expires = row.ExpiresAt.UTC()
+	}
+	if token != "" && expires.After(now) {
+		return &PublicLink{
+			ServiceOrderID: row.ID.String(), TicketNo: row.TicketNo,
+			PublicToken: token, TrackingURL: s.trackingURL(token),
+			ExpiresAt: expires, Regenerated: false,
+		}, nil
+	}
+
+	token, err = newPublicToken()
+	if err != nil {
+		return nil, err
+	}
+	days := 30
+	if row.PickedUpAt != nil {
+		days = 90
+	}
+	expires = now.AddDate(0, 0, days)
+	if err := s.db.WithContext(ctx).Exec(`
+		UPDATE service_orders
+		SET public_token = ?, public_token_expires_at = ?, updated_at = now()
+		WHERE id = ? AND tenant_id = ?`, token, expires, orderID, tenantID).Error; err != nil {
+		return nil, apperror.Internal(err)
+	}
+	return &PublicLink{
+		ServiceOrderID: row.ID.String(), TicketNo: row.TicketNo,
+		PublicToken: token, TrackingURL: s.trackingURL(token),
+		ExpiresAt: expires, Regenerated: true,
+	}, nil
+}
+
 // Timeline returns the immutable status history.
 func (s *Service) Timeline(ctx context.Context, actor Actor, id uuid.UUID) ([]StatusHistoryEntry, error) {
 	row, err := s.findOrder(ctx, actor, id)

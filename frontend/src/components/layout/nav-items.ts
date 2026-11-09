@@ -1,7 +1,9 @@
 import {
+  Bell,
   Boxes,
   ClipboardList,
   LayoutDashboard,
+  MessageCircle,
   Receipt,
   ReceiptText,
   Settings,
@@ -57,12 +59,16 @@ export const navGroups: NavGroup[] = [
       { label: 'Kasir', to: '/cashier', icon: ReceiptText, permission: 'payment.view' },
       { label: 'Invoice', to: '/invoices', icon: Wallet, permission: 'invoice.view' },
       { label: 'Pengeluaran', to: '/expenses', icon: Receipt, permission: 'expense.view' },
-      { label: 'Laporan', icon: ClipboardList, permission: 'report.view', stage: 9 },
+      { label: 'Laporan', icon: ClipboardList, permission: 'report.view', stage: 10 },
     ],
   },
   {
     label: 'Purna Jual',
-    items: [{ label: 'Garansi', icon: ShieldCheck, permission: 'warranty.view', stage: 10 }],
+    items: [
+      { label: 'Garansi', to: '/warranties', icon: ShieldCheck, permission: 'warranty.view' },
+      { label: 'Notifikasi', to: '/notifications', icon: Bell },
+      { label: 'Outbox WA', to: '/whatsapp-outbox', icon: MessageCircle, permission: 'settings.manage' },
+    ],
   },
   {
     label: 'Pengaturan',

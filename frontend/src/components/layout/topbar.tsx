@@ -1,18 +1,17 @@
-import { Bell, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 
 import { OutletSwitcher } from '@/components/layout/outlet-switcher';
 import { ProfileMenu } from '@/components/layout/profile-menu';
+import { NotificationMenu } from '@/features/notifications/components/notification-menu';
 
 export function Topbar({
   onOpenMenu,
   menuOpen,
-  alertCount,
   title,
   subtitle,
 }: {
   onOpenMenu: () => void;
   menuOpen: boolean;
-  alertCount: number;
   title: string;
   subtitle: string;
 }) {
@@ -38,18 +37,7 @@ export function Topbar({
           <OutletSwitcher />
         </div>
 
-        <a
-          href="#alerts-panel"
-          className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-          aria-label={alertCount > 0 ? `${alertCount} peringatan perlu tindakan` : 'Tidak ada peringatan'}
-        >
-          <Bell className="h-5 w-5" aria-hidden="true" />
-          {alertCount > 0 && (
-            <span className="absolute right-1 top-1 flex min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold leading-[18px] text-white">
-              {alertCount > 99 ? '99+' : alertCount}
-            </span>
-          )}
-        </a>
+        <NotificationMenu />
 
         <ProfileMenu />
       </div>

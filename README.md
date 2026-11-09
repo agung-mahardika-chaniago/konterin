@@ -4,9 +4,9 @@ Aplikasi manajemen usaha servis HP untuk teknisi, toko servis, dan usaha reparas
 Dirancang sebagai **modular monolith** yang siap dikembangkan menjadi produk SaaS
 multi-tenant dan multi-outlet.
 
-> **Status proyek: Tahap 8 — Invoice, Kasir & Pembayaran (selesai, v0.8.0).**
-> Tahap 9 (tracking publik, garansi & notifikasi) berikutnya.
-> Rincian implementasi: [`docs/15-implementasi-tahap-8.md`](docs/15-implementasi-tahap-8.md).
+> **Status proyek: Tahap 9 — Tracking Publik, Garansi & Notifikasi (selesai, v0.9.0).**
+> Tahap 10 (laporan, pengaturan & dashboard bisnis) berikutnya.
+> Rincian implementasi: [`docs/16-implementasi-tahap-9.md`](docs/16-implementasi-tahap-9.md).
 
 ---
 
@@ -24,6 +24,7 @@ multi-tenant dan multi-outlet.
 | Cetak | Invoice A4, struk thermal 58 mm / 80 mm, label servis |
 | Deployment | Docker Compose + Nginx |
 | PWA | Manifest + service worker (app shell) |
+| Notifikasi | In-app + outbox WhatsApp (`noop`/`fonnte`/`wablas`) dengan worker |
 
 ## 2. Struktur Repository
 
@@ -59,7 +60,8 @@ Penjelasan lengkap: [`docs/04-struktur-folder.md`](docs/04-struktur-folder.md).
 | [13 — Implementasi Tahap 6](docs/13-implementasi-tahap-6.md) | Diagnosis, status machine 10 status, item jasa/sparepart, mutasi stok, penugasan teknisi |
 | [14 — Implementasi Tahap 7](docs/14-implementasi-tahap-7.md) | Master sparepart, kategori/supplier, pembelian, opname, movement, alert, valuasi, barcode |
 | [15 — Implementasi Tahap 8](docs/15-implementasi-tahap-8.md) | Invoice draft/finalisasi, diskon, pembayaran & idempotency, void, kasir harian, cetak, pengeluaran, pickup lunas |
-| [OpenAPI Tahap 8](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, inventori, invoice, pembayaran, pengeluaran, health |
+| [16 — Implementasi Tahap 9](docs/16-implementasi-tahap-9.md) | Tracking publik & privasi, QR label, garansi otomatis, klaim/rework, notifikasi in-app, outbox WhatsApp, worker reminder & purge |
+| [OpenAPI Tahap 9](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, inventori, invoice, pembayaran, pengeluaran, tracking publik, garansi/klaim, notifikasi, outbox WA, health |
 
 ## 4. Cara Menjalankan (Development)
 
@@ -97,7 +99,18 @@ go run ./cmd/cli create-tenant `
 
 # 5. Jalankan API
 go run ./cmd/api
+
+# 6. Jalankan worker di terminal terpisah (outbox WA, reminder, purge)
+go run ./cmd/worker
+# Atau jalankan semua job satu kali:
+go run ./cmd/worker -once
 ```
+
+Worker memakai interval default outbox 30 detik, reminder 15 menit, dan purge
+kredensial 1 jam; ubah lewat `WORKER_OUTBOX_INTERVAL`,
+`WORKER_REMINDER_INTERVAL`, dan `WORKER_PURGE_INTERVAL`. Provider WhatsApp
+dibaca dari `business_settings` (default `noop`); isi `WA_FONNTE_TOKEN` atau
+`WA_WABLAS_TOKEN`/`WA_WABLAS_SECRET` untuk pengiriman nyata.
 
 Health & meta:
 
@@ -140,7 +153,11 @@ Modul kasir menyediakan ringkasan harian dan rekap metode bayar, daftar/detail
 invoice dengan diskon, finalisasi, pembayaran DP/lunas, void, cetak invoice A4
 dan struk thermal 58/80 mm, tombol WhatsApp, serta halaman pengeluaran dan
 kategori. Status pickup mengikuti aturan invoice lunas dengan override Owner
-yang tercatat.
+yang tercatat. Pelanggan dapat melacak servis lewat `/track` (tiket + 4 digit
+HP) atau tautan/QR `/track/:token`; label servis memakai token tracking asli.
+Garansi terbentuk otomatis saat pickup, klaim dan order rework tertaut ke
+servis asal, serta topbar menyediakan notifikasi in-app. Halaman outbox
+WhatsApp menampilkan status pesan dan tombol kirim ulang untuk pesan gagal.
 
 Pemeriksaan frontend:
 

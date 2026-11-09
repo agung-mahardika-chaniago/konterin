@@ -350,9 +350,11 @@ frontend/src/features/print/{invoice,receipt}.tsx
 backend/internal/modules/tracking/*
 backend/internal/modules/warranty/*
 backend/internal/modules/notification/*
-backend/internal/jobs/{reminder,wa_outbox,credential_purge}.go
+backend/internal/jobs/reminder.go
+backend/cmd/worker/main.go
 frontend/src/features/tracking/*
 frontend/src/features/warranties/*
+frontend/src/features/notifications/*
 ```
 
 **Pekerjaan**
@@ -367,13 +369,19 @@ frontend/src/features/warranties/*
 8. Purge kredensial perangkat setelah 30 hari pickup.
 
 **Acceptance**
-- [ ] Tracking tidak membocorkan nama lengkap, alamat, PIN, catatan internal,
+- [x] Tracking tidak membocorkan nama lengkap, alamat, PIN, catatan internal,
       harga modal.
-- [ ] Kombinasi tiket + 4 digit salah ditolak (pesan generik).
-- [ ] Rate limit terbukti.
-- [ ] Garansi aktif dengan tanggal benar; klaim tertaut servis asal.
-- [ ] Pesan WA tercatat di outbox dengan status jelas.
-- [ ] Worker idempoten (tidak kirim ganda).
+- [x] Kombinasi tiket + 4 digit salah ditolak (pesan generik).
+- [x] Rate limit terbukti.
+- [x] Garansi aktif dengan tanggal benar; klaim tertaut servis asal.
+- [x] Pesan WA tercatat di outbox dengan status jelas.
+- [x] Worker idempoten (tidak kirim ganda).
+
+> **Status:** selesai (v0.9.0). Halaman tracking publik `/track` dan
+> `/track/:token`, QR label ke tautan asli, garansi otomatis, klaim/rework,
+> notifikasi in-app, outbox WhatsApp, worker reminder, dan purge kredensial
+> sudah berjalan. Bukti implementasi ada di
+> [`16 - Implementasi Tahap 9`](16-implementasi-tahap-9.md).
 
 ---
 
@@ -545,13 +553,13 @@ perubahan status.
 
 ## 8. Langkah Berikutnya
 
-Tahap 8 selesai. Tahap 9 (tracking publik, garansi, dan notifikasi) dimulai
+Tahap 9 selesai. Tahap 10 (laporan, pengaturan, dan dashboard bisnis) dimulai
 dengan:
 
-1. Halaman publik `/track` (tiket + 4 digit HP) dan `/track/:token` dengan
-   whitelist field serta rate limit.
-2. QR pada label servis mengarah ke halaman tracking.
-3. Garansi otomatis saat pickup, daftar/detail garansi, klaim, dan rework order.
-4. Notifikasi in-app + outbox WhatsApp dengan adapter `noop`/`fonnte`/`wablas`.
-5. Tombol "Chat via WhatsApp" (deep link) yang berfungsi.
-6. Worker reminder servis, pickup, dan garansi; purge kredensial 30 hari.
+1. Laporan penjualan, servis, stok, dan laba per outlet/periode.
+2. Halaman pengaturan toko: identitas, pajak, template WhatsApp, dan provider
+   WhatsApp.
+3. Manajemen pengguna, role/permission, dan outlet.
+4. Audit log yang dapat difilter.
+5. Dashboard bisnis untuk Owner (tren, performa outlet, ekspor).
+6. Ekspor CSV dan pencetakan laporan.

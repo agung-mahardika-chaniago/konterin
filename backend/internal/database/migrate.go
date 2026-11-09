@@ -17,7 +17,7 @@ import (
 
 // ExpectedVersion is the migration version this build expects. Bump it whenever
 // a new migration pair is added.
-const ExpectedVersion uint = 16
+const ExpectedVersion uint = 17
 
 // Migrator wraps golang-migrate with the embedded migration files.
 type Migrator struct {

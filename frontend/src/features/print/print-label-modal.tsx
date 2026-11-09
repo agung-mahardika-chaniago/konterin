@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { getServiceOrderPublicLink } from '../services/api';
 import { ThermalLabel } from './thermal-label';
 import type { ServiceOrderDetail, ServiceOrderListItem } from '../services/types';
 
@@ -21,8 +22,31 @@ interface PrintLabelModalProps {
 
 export function PrintLabelModal({ open, onOpenChange, order }: PrintLabelModalProps) {
   const [width, setWidth] = React.useState<'58' | '80'>('58');
+  const [trackingUrl, setTrackingUrl] = React.useState<string | null>(null);
+  const orderId = order?.id;
+  const directTrackingUrl =
+    order && 'tracking_url' in order && order.tracking_url ? order.tracking_url : null;
+
+  React.useEffect(() => {
+    if (!open || !orderId) return;
+    let active = true;
+    setTrackingUrl(directTrackingUrl);
+    getServiceOrderPublicLink(orderId)
+      .then((link) => {
+        if (active) setTrackingUrl(link.tracking_url);
+      })
+      .catch(() => {
+        // The label still prints with the ticket lookup fallback URL.
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, orderId, directTrackingUrl]);
 
   if (!order) return null;
+
+  const fallbackTrackingUrl = `${window.location.origin}/track?ticket=${encodeURIComponent(order.ticket_no)}`;
+  const effectiveTrackingUrl = trackingUrl || directTrackingUrl || fallbackTrackingUrl;
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank', 'width=450,height=600');
@@ -112,7 +136,7 @@ export function PrintLabelModal({ open, onOpenChange, order }: PrintLabelModalPr
         {/* Live Preview Container */}
         <div className="py-4 bg-slate-50 flex items-center justify-center rounded-lg border border-slate-200 overflow-x-auto min-h-[300px]">
           <div id="printable-label-content" className="bg-white shadow-md p-1 rounded">
-            <ThermalLabel order={order} width={width} />
+            <ThermalLabel order={order} width={width} trackingUrl={effectiveTrackingUrl} />
           </div>
         </div>
 

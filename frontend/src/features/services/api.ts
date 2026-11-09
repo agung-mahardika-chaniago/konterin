@@ -11,6 +11,7 @@ import type {
   ServiceOrderItem,
   ServiceOrderListItem,
   ServicePhoto,
+  PublicLink,
   SparepartOption,
   StatusHistoryEntry,
   TechnicianOption,
@@ -49,6 +50,11 @@ export async function updateServiceOrder(id: string, payload: UpdateServiceReque
 
 export async function getServiceTimeline(id: string): Promise<StatusHistoryEntry[]> {
   return api.get<StatusHistoryEntry[]>(`/service-orders/${id}/timeline`);
+}
+
+/** Returns (and regenerates when expired) the public QR tracking link. */
+export async function getServiceOrderPublicLink(id: string): Promise<PublicLink> {
+  return api.get<PublicLink>(`/service-orders/${id}/public-link`);
 }
 
 export async function setCredential(

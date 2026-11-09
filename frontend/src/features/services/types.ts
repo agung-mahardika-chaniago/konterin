@@ -178,6 +178,15 @@ export interface ServiceOrderCreated {
   created_at: string;
 }
 
+export interface PublicLink {
+  service_order_id: string;
+  ticket_no: string;
+  public_token: string;
+  tracking_url: string;
+  expires_at: string;
+  regenerated: boolean;
+}
+
 export interface TechnicianOption {
   id: string;
   name: string;

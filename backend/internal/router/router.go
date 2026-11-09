@@ -16,10 +16,13 @@ import (
 	"fixphone/backend/internal/modules/expense"
 	"fixphone/backend/internal/modules/inventory"
 	"fixphone/backend/internal/modules/invoice"
+	"fixphone/backend/internal/modules/notification"
 	"fixphone/backend/internal/modules/outlet"
 	"fixphone/backend/internal/modules/payment"
 	servicemod "fixphone/backend/internal/modules/service"
+	"fixphone/backend/internal/modules/tracking"
 	"fixphone/backend/internal/modules/user"
+	"fixphone/backend/internal/modules/warranty"
 	"fixphone/backend/internal/pkg/jwtutil"
 	"fixphone/backend/internal/pkg/version"
 
@@ -109,11 +112,28 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 	invoiceModule := invoice.NewService(db)
 	paymentModule := payment.NewService(db)
 	expenseModule := expense.NewService(db)
+	notificationModule := notification.NewService(db, notification.ServiceDeps{
+		AppBaseURL: cfg.AppBaseURL, FonnteToken: cfg.FonnteToken,
+		WablasToken: cfg.WablasToken, WablasSecret: cfg.WablasSecret,
+		WablasURL: cfg.WablasURL,
+	})
+	warrantyModule := warranty.NewService(db)
+	warrantyModule.SetClaimNotifier(notificationModule.OnClaimCreated)
+	serviceModule.SetPickupHook(warrantyModule.CreateForPickupTx)
+	serviceModule.SetStatusHook(func(ctx context.Context, tx *gorm.DB, event servicemod.StatusEvent) error {
+		return notificationModule.OnServiceStatus(ctx, tx, notification.ServiceStatusEvent{
+			TenantID: event.TenantID, OutletID: event.OutletID, OrderID: event.OrderID,
+			TicketNo: event.TicketNo, FromStatus: event.FromStatus, ToStatus: event.ToStatus,
+			ActorID: event.ActorID, PickedUpAt: event.PickedUpAt,
+		})
+	})
+	trackingModule := tracking.NewService(db)
 
 	authMiddleware := middleware.Auth(tokenManager, authService)
 	tenantMiddleware := middleware.Tenant(db)
 	can := middleware.RequirePermission
 	loginLimiter := middleware.RateLimit(rateLimit, rateWindow)
+	publicLimiter := middleware.RateLimit(10, time.Minute)
 
 	api := r.Group("/api/v1")
 	{
@@ -132,6 +152,9 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		invoice.RegisterRoutes(api, invoice.NewHandler(invoiceModule), authMiddleware, tenantMiddleware, can)
 		payment.RegisterRoutes(api, payment.NewHandler(paymentModule), authMiddleware, tenantMiddleware, can)
 		expense.RegisterRoutes(api, expense.NewHandler(expenseModule), authMiddleware, tenantMiddleware, can)
+		warranty.RegisterRoutes(api, warranty.NewHandler(warrantyModule), authMiddleware, tenantMiddleware, can)
+		notification.RegisterRoutes(api, notification.NewHandler(notificationModule), authMiddleware, tenantMiddleware, can)
+		tracking.RegisterRoutes(api, tracking.NewHandler(trackingModule), publicLimiter)
 	}
 
 	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {

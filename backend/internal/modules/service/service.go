@@ -24,9 +24,30 @@ type Options struct {
 
 // Service implements customer intake and service-order management.
 type Service struct {
-	db   *gorm.DB
-	opts Options
+	db         *gorm.DB
+	opts       Options
+	statusHook StatusHookFunc
+	pickupHook PickupHookFunc
 }
+
+// StatusEvent is emitted after a status transition, inside the transaction.
+type StatusEvent struct {
+	TenantID   uuid.UUID
+	OutletID   uuid.UUID
+	OrderID    uuid.UUID
+	CustomerID uuid.UUID
+	TicketNo   string
+	FromStatus string
+	ToStatus   string
+	ActorID    *uuid.UUID
+	PickedUpAt time.Time
+}
+
+// StatusHookFunc lets other modules react to status changes atomically.
+type StatusHookFunc func(context.Context, *gorm.DB, StatusEvent) error
+
+// PickupHookFunc creates one-time after-sales records when an order is picked up.
+type PickupHookFunc func(context.Context, *gorm.DB, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, time.Time) error
 
 // NewService builds the service module.
 func NewService(db *gorm.DB, opts Options) *Service {
@@ -35,6 +56,12 @@ func NewService(db *gorm.DB, opts Options) *Service {
 	}
 	return &Service{db: db, opts: opts}
 }
+
+// SetStatusHook wires cross-module notifications after a status change.
+func (s *Service) SetStatusHook(hook StatusHookFunc) { s.statusHook = hook }
+
+// SetPickupHook wires warranty creation into the pickup transaction.
+func (s *Service) SetPickupHook(hook PickupHookFunc) { s.pickupHook = hook }
 
 func actorTenant(actor Actor) (uuid.UUID, error) {
 	if actor.TenantID == uuid.Nil {

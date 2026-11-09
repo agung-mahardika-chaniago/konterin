@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
   title: FixPhone API
-  version: 0.8.0
+  version: 0.9.0
   description: |
-    Kontrak API FixPhone untuk Tahap 8: autentikasi, sesi, RBAC, pengguna,
+    Kontrak API FixPhone untuk Tahap 9: autentikasi, sesi, RBAC, pengguna,
     role, outlet, dashboard, pelanggan, intake servis HP, diagnosis, state
     machine status, item jasa/sparepart, kredensial perangkat, inventori,
-    invoice, kasir, pembayaran, dan pengeluaran. Semua waktu memakai ISO-8601
-    UTC dan semua nominal uang berupa integer rupiah.
+    invoice, kasir, pembayaran, pengeluaran, tracking publik, garansi/klaim,
+    notifikasi in-app, dan outbox WhatsApp. Semua waktu memakai ISO-8601 UTC
+    dan semua nominal uang berupa integer rupiah.
 
     Tanggal dan rentang pada endpoint dashboard ditafsirkan pada timezone
     outlet aktif (`outlets.timezone`, default `Asia/Jakarta`).
@@ -15,6 +16,10 @@ info:
     Access token dikirim melalui header `Authorization: Bearer <token>`.
     Refresh token hanya disimpan di cookie `fixphone_refresh`
     (`HttpOnly; SameSite=Strict; Path=/api/v1/auth`).
+
+    Endpoint `/public/*` tidak memerlukan autentikasi, dibatasi 10 request per
+    menit per IP, dan hanya mengembalikan data yang masuk whitelist privasi.
+    Token tracking berlaku 30 hari (90 hari setelah pickup).
 servers:
   - url: /api/v1
     description: API root melalui reverse proxy
@@ -30,6 +35,9 @@ tags:
   - name: Invoices
   - name: Payments
   - name: Expenses
+  - name: Warranties
+  - name: Notifications
+  - name: Tracking
   - name: Meta
 
 paths:
@@ -1841,6 +1849,514 @@ paths:
         '422':
           $ref: '#/components/responses/Validation'
 
+  /service-orders/{id}/public-link:
+    get:
+      tags: [ServiceOrders]
+      summary: Ambil link tracking publik
+      description: |
+        Memerlukan permission `service.view`. Mengembalikan token dan URL
+        tracking yang sudah ada; token baru dibuat otomatis bila belum ada
+        atau sudah kedaluwarsa. Masa berlaku 30 hari, atau 90 hari setelah
+        servis diambil. `tracking_url` kosong bila `APP_BASE_URL` belum diatur.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Link tracking publik aktif.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicLinkEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /public/track:
+    get:
+      tags: [Tracking]
+      summary: Cari status servis secara publik
+      description: |
+        Tidak memerlukan autentikasi. Rate limit 10 request/menit/IP. Nomor
+        tiket dan empat digit terakhir nomor HP wajib cocok. Kegagalan selalu
+        memakai pesan generik agar tidak membocorkan keberadaan data.
+      security: []
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          schema:
+            type: string
+          example: FP-261103-0001
+        - name: phone_last4
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{4}$'
+          example: '7890'
+      responses:
+        '200':
+          description: Data tracking yang sudah difilter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicTrackingEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /public/track/{token}:
+    get:
+      tags: [Tracking]
+      summary: Buka status servis melalui token QR
+      description: |
+        Tidak memerlukan autentikasi. Rate limit 10 request/menit/IP. Token
+        berupa 32 karakter hex dan harus belum kedaluwarsa.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TrackingToken'
+      responses:
+        '200':
+          description: Data tracking yang sudah difilter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicTrackingEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /public/store:
+    get:
+      tags: [Tracking]
+      summary: Identitas toko untuk halaman tracking
+      description: |
+        Tidak memerlukan autentikasi. Rate limit 10 request/menit/IP. Hanya
+        tersedia bila token tracking valid dan tracking publik aktif.
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{32}$'
+      responses:
+        '200':
+          description: Nama dan logo toko.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicStoreEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /warranties:
+    get:
+      tags: [Warranties]
+      summary: Daftar garansi
+      description: |
+        Memerlukan permission `warranty.view`. Data dibatasi tenant dan outlet
+        yang dapat diakses aktor. Garansi aktif yang sudah melewati tanggal
+        akhir otomatis ditandai `expired`.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, expired, void]
+        - name: q
+          in: query
+          description: Cari nomor garansi, tiket, nama pelanggan, atau perangkat.
+          schema:
+            type: string
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: expiring_in_days
+          in: query
+          description: Hanya garansi aktif yang berakhir dalam N hari ke depan.
+          schema:
+            type: integer
+            minimum: 1
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar garansi terpaginasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /warranties/{id}:
+    get:
+      tags: [Warranties]
+      summary: Detail garansi
+      description: |
+        Memerlukan permission `warranty.view`. Respons memuat invoice terkait
+        dan daftar klaim garansi.
+      parameters:
+        - $ref: '#/components/parameters/WarrantyId'
+      responses:
+        '200':
+          description: Detail garansi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /warranties/{id}/claims:
+    post:
+      tags: [Warranties]
+      summary: Buat klaim garansi
+      description: |
+        Memerlukan permission `warranty.claim`. Hanya garansi `active` yang
+        belum berakhir yang dapat diklaim. Klaim baru berstatus `submitted`,
+        memicu notifikasi in-app, dan mengantrikan pesan WhatsApp.
+      parameters:
+        - $ref: '#/components/parameters/WarrantyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWarrantyClaimRequest'
+      responses:
+        '201':
+          description: Klaim garansi dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyClaimEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /claims:
+    get:
+      tags: [Warranties]
+      summary: Daftar klaim garansi
+      description: Memerlukan permission `warranty.view`.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [submitted, approved, rejected, in_progress, completed]
+        - name: q
+          in: query
+          description: Cari nomor klaim, nomor garansi, tiket, atau pelanggan.
+          schema:
+            type: string
+        - name: outlet_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar klaim terpaginasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyClaimListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /claims/{id}:
+    get:
+      tags: [Warranties]
+      summary: Detail klaim garansi
+      description: Memerlukan permission `warranty.view`.
+      parameters:
+        - $ref: '#/components/parameters/ClaimId'
+      responses:
+        '200':
+          description: Detail klaim.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyClaimEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Warranties]
+      summary: Ubah status atau resolusi klaim
+      description: |
+        Memerlukan permission `warranty.claim`. Transisi yang diizinkan:
+        `submitted` -> `approved`/`rejected`/`in_progress`,
+        `approved` -> `in_progress`/`completed`/`rejected`,
+        `in_progress` -> `completed`/`rejected`. Resolusi wajib diisi saat
+        status menjadi `completed` atau `rejected`.
+      parameters:
+        - $ref: '#/components/parameters/ClaimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWarrantyClaimRequest'
+      responses:
+        '200':
+          description: Klaim setelah perubahan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyClaimEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /claims/{id}/rework:
+    post:
+      tags: [Warranties]
+      summary: Buat order pengerjaan ulang
+      description: |
+        Memerlukan permission `service.create` dan `warranty.claim`. Membuat
+        service order baru bertipe `rework` tanpa biaya default, menyalin data
+        pelanggan/perangkat, dan menautkannya ke klaim. Klaim berubah menjadi
+        `in_progress`. Satu klaim hanya boleh memiliki satu order rework.
+      parameters:
+        - $ref: '#/components/parameters/ClaimId'
+      responses:
+        '201':
+          description: Order rework dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyReworkEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Kotak masuk notifikasi pengguna
+      description: |
+        Notifikasi personal dan broadcast tenant milik pengguna. Broadcast
+        memakai read receipt per pengguna melalui `notification_reads`.
+      parameters:
+        - name: unread
+          in: query
+          description: Hanya tampilkan notifikasi yang belum dibaca.
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar notifikasi terpaginasi.
+          headers:
+            X-Unread-Count:
+              description: Jumlah notifikasi belum dibaca milik pengguna.
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffNotificationListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Jumlah notifikasi belum dibaca
+      responses:
+        '200':
+          description: Jumlah notifikasi belum dibaca.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationUnreadCountEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Tandai satu notifikasi sudah dibaca
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: Notifikasi ditandai sudah dibaca.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationReadEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Tandai semua notifikasi sudah dibaca
+      responses:
+        '200':
+          description: Semua notifikasi terlihat ditandai sudah dibaca.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationReadAllEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /whatsapp-messages:
+    get:
+      tags: [Notifications]
+      summary: Daftar outbox WhatsApp
+      description: Memerlukan permission `settings.manage`.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, processing, sent, failed, cancelled]
+        - name: q
+          in: query
+          description: Cari nomor HP, nomor tiket, atau nama pelanggan.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Daftar pesan outbox terpaginasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsAppMessageListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /whatsapp-messages/{id}/retry:
+    post:
+      tags: [Notifications]
+      summary: Antrikan ulang pesan WhatsApp
+      description: |
+        Memerlukan permission `settings.manage`. Status menjadi `queued`,
+        `attempts` direset, dan pesan dijadwalkan segera. Pesan berstatus
+        `sent` tidak dapat dikirim ulang (`409 MESSAGE_SENT`).
+      parameters:
+        - $ref: '#/components/parameters/WhatsAppMessageId'
+      responses:
+        '200':
+          description: Pesan setelah diantrikan ulang.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsAppMessageEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /service-orders/{id}/notify:
+    post:
+      tags: [Notifications]
+      summary: Antrikan pesan WhatsApp untuk servis
+      description: |
+        Memerlukan permission `service.update`. Bila `message` kosong, template
+        `template_key` dirender dengan data servis. Respons `201` memuat
+        `message_id` dan `status` outbox.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotifyServiceOrderRequest'
+      responses:
+        '201':
+          description: Pesan masuk ke outbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyServiceOrderEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Validation'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1931,6 +2447,42 @@ components:
       schema:
         type: string
         format: uuid
+    WarrantyId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ClaimId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotificationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WhatsAppMessageId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TrackingToken:
+      name: token
+      in: path
+      required: true
+      description: Token tracking 32 karakter hex.
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{32}$'
 
   responses:
     Unauthorized:
@@ -4109,3 +4661,564 @@ components:
         name:
           type: string
           maxLength: 80
+
+    PublicStore:
+      type: object
+      properties:
+        name:
+          type: string
+        logo_url:
+          type: [string, 'null']
+
+    PublicTrackingWarranty:
+      type: object
+      description: Ringkasan garansi yang aman ditampilkan ke publik.
+      properties:
+        active:
+          type: boolean
+        status:
+          type: string
+          enum: [active, expired, void, none]
+        days:
+          type: integer
+        end_date:
+          type: [string, 'null']
+          format: date
+
+    PublicTracking:
+      type: object
+      description: |
+        Payload tracking yang sudah difilter. Tidak pernah memuat nama lengkap
+        pelanggan, nomor HP lengkap, alamat, IMEI, PIN, catatan internal, foto,
+        harga modal, atau nama teknisi.
+      properties:
+        ticket_no:
+          type: string
+        store:
+          $ref: '#/components/schemas/PublicStore'
+        status:
+          type: string
+          enum:
+            - received
+            - waiting_diagnosis
+            - waiting_approval
+            - waiting_part
+            - in_progress
+            - testing
+            - completed
+            - ready_for_pickup
+            - picked_up
+            - cancelled
+        status_label:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+        estimated_done_at:
+          type: [string, 'null']
+          format: date-time
+        device:
+          type: string
+        complaint:
+          type: string
+        diagnosis:
+          type: [string, 'null']
+        invoice_status:
+          type: [string, 'null']
+        payment_status_label:
+          type: string
+        pickup_status:
+          type: string
+        warranty:
+          $ref: '#/components/schemas/PublicTrackingWarranty'
+
+    PublicTrackingEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/PublicTracking'
+
+    PublicStoreEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/PublicStore'
+
+    PublicLink:
+      type: object
+      properties:
+        service_order_id:
+          type: string
+          format: uuid
+        ticket_no:
+          type: string
+        public_token:
+          type: string
+          pattern: '^[0-9a-fA-F]{32}$'
+        tracking_url:
+          type: string
+          description: Kosong bila `APP_BASE_URL` belum dikonfigurasi.
+        expires_at:
+          type: string
+          format: date-time
+        regenerated:
+          type: boolean
+          description: True bila token baru dibuat pada request ini.
+
+    PublicLinkEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/PublicLink'
+
+    WarrantyCustomerRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: string
+
+    WarrantyDeviceRef:
+      type: object
+      properties:
+        brand:
+          type: string
+        model:
+          type: string
+
+    WarrantyServiceRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_no:
+          type: string
+        status:
+          type: string
+
+    WarrantyOutletRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    WarrantyInvoiceRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoice_no:
+          type: string
+        status:
+          type: string
+        total_amount:
+          type: integer
+          format: int64
+        paid_amount:
+          type: integer
+          format: int64
+        remaining_amount:
+          type: integer
+          format: int64
+
+    WarrantyClaim:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        claim_no:
+          type: string
+          example: CLM-261109-0001
+        warranty_id:
+          type: string
+          format: uuid
+        warranty_no:
+          type: string
+        status:
+          type: string
+          enum: [submitted, approved, rejected, in_progress, completed]
+        complaint:
+          type: string
+        resolution:
+          type: [string, 'null']
+        customer:
+          $ref: '#/components/schemas/WarrantyCustomerRef'
+        device:
+          $ref: '#/components/schemas/WarrantyDeviceRef'
+        service_order:
+          $ref: '#/components/schemas/WarrantyServiceRef'
+        outlet:
+          $ref: '#/components/schemas/WarrantyOutletRef'
+        handled_by:
+          type: [string, 'null']
+        rework_service_order:
+          $ref: '#/components/schemas/WarrantyServiceRef'
+        claimed_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Warranty:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        warranty_no:
+          type: string
+          example: WR-261109-0001
+        type:
+          type: string
+          enum: [service, part, both]
+        status:
+          type: string
+          enum: [active, expired, void]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        days:
+          type: integer
+        terms:
+          type: [string, 'null']
+        customer:
+          $ref: '#/components/schemas/WarrantyCustomerRef'
+        device:
+          $ref: '#/components/schemas/WarrantyDeviceRef'
+        service_order:
+          $ref: '#/components/schemas/WarrantyServiceRef'
+        outlet:
+          $ref: '#/components/schemas/WarrantyOutletRef'
+        claim_count:
+          type: integer
+          format: int64
+        invoice:
+          oneOf:
+            - $ref: '#/components/schemas/WarrantyInvoiceRef'
+            - type: 'null'
+          description: Hanya ada pada detail garansi.
+        claims:
+          type: array
+          description: Hanya ada pada detail garansi.
+          items:
+            $ref: '#/components/schemas/WarrantyClaim'
+        created_at:
+          type: string
+          format: date-time
+
+    WarrantyEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Warranty'
+
+    WarrantyListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warranty'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CreateWarrantyClaimRequest:
+      type: object
+      required: [complaint]
+      properties:
+        complaint:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    UpdateWarrantyClaimRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [submitted, approved, rejected, in_progress, completed]
+        resolution:
+          type: [string, 'null']
+          maxLength: 2000
+
+    WarrantyClaimEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/WarrantyClaim'
+
+    WarrantyClaimListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WarrantyClaim'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    WarrantyReworkResult:
+      type: object
+      properties:
+        service_order_id:
+          type: string
+          format: uuid
+        ticket_no:
+          type: string
+        status:
+          type: string
+        claim_id:
+          type: string
+          format: uuid
+        claim_status:
+          type: string
+          enum: [submitted, approved, rejected, in_progress, completed]
+        invoice_no:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    WarrantyReworkEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/WarrantyReworkResult'
+
+    StaffNotification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          example: service_ready
+        title:
+          type: string
+        body:
+          type: [string, 'null']
+        link:
+          type: [string, 'null']
+          description: Path frontend, misalnya `/services/{id}` atau `/claims/{id}`.
+        entity_type:
+          type: [string, 'null']
+        entity_id:
+          type: [string, 'null']
+          format: uuid
+        is_read:
+          type: boolean
+        read_at:
+          type: [string, 'null']
+          format: date-time
+        is_broadcast:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    StaffNotificationListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffNotification'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    NotificationUnreadCount:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+
+    NotificationUnreadCountEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/NotificationUnreadCount'
+
+    NotificationReadResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        is_read:
+          type: boolean
+
+    NotificationReadEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/NotificationReadResult'
+
+    NotificationReadAllResult:
+      type: object
+      properties:
+        unread:
+          type: integer
+          const: 0
+
+    NotificationReadAllEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/NotificationReadAllResult'
+
+    WhatsAppMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        service_order_id:
+          type: [string, 'null']
+          format: uuid
+        ticket_no:
+          type: [string, 'null']
+        customer_name:
+          type: [string, 'null']
+        customer_id:
+          type: [string, 'null']
+          format: uuid
+        phone:
+          type: string
+          description: Nomor yang sudah dinormalisasi (umumnya berawalan `62`).
+        template_key:
+          type: string
+          example: ready_pickup
+        body:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [queued, processing, sent, failed, cancelled]
+        attempts:
+          type: integer
+        last_error:
+          type: [string, 'null']
+        provider:
+          type: string
+          enum: [noop, fonnte, wablas]
+        provider_message_id:
+          type: [string, 'null']
+        scheduled_at:
+          type: string
+          format: date-time
+        sent_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    WhatsAppMessageEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/WhatsAppMessage'
+
+    WhatsAppMessageListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WhatsAppMessage'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    NotifyServiceOrderRequest:
+      type: object
+      properties:
+        template_key:
+          type: string
+          description: |
+            Kunci template (`status_update`, `ready_pickup`, `invoice`,
+            `reminder`, `warranty`, `claim_received`). Default `status_update`.
+        message:
+          type: string
+          description: Bila kosong, template dirender otomatis. Dipotong 4000 karakter oleh server.
+
+    NotifyServiceOrderResult:
+      type: object
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing, sent, failed, cancelled]
+
+    NotifyServiceOrderEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/NotifyServiceOrderResult'

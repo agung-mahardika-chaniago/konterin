@@ -43,6 +43,11 @@ type Config struct {
 	SeedSuperadminEmail    string
 	SeedSuperadminPassword string
 	SeedDemo               bool
+
+	FonnteToken  string
+	WablasToken  string
+	WablasSecret string
+	WablasURL    string
 }
 
 // Load reads .env (when present) and then validates the environment.
@@ -102,6 +107,10 @@ func Load() (*Config, error) {
 	cfg.CORSOrigins = splitCSV(os.Getenv("CORS_ORIGINS"))
 	cfg.SeedSuperadminEmail = strings.ToLower(strings.TrimSpace(os.Getenv("SEED_SUPERADMIN_EMAIL")))
 	cfg.SeedSuperadminPassword = os.Getenv("SEED_SUPERADMIN_PASSWORD")
+	cfg.FonnteToken = strings.TrimSpace(os.Getenv("WA_FONNTE_TOKEN"))
+	cfg.WablasToken = strings.TrimSpace(os.Getenv("WA_WABLAS_TOKEN"))
+	cfg.WablasSecret = strings.TrimSpace(os.Getenv("WA_WABLAS_SECRET"))
+	cfg.WablasURL = strings.TrimSpace(os.Getenv("WA_WABLAS_URL"))
 
 	if err := cfg.validate(); err != nil {
 		return nil, err

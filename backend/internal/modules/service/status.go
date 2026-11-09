@@ -187,8 +187,9 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 			args = append(args, now)
 		case "picked_up":
 			purgeAt := now.Add(30 * 24 * time.Hour)
-			query += `, picked_up_at = ?, credential_purge_at = ?, completed_at = COALESCE(completed_at, ?)`
-			args = append(args, now, purgeAt, now)
+			tokenExpiry := now.AddDate(0, 0, 90)
+			query += `, picked_up_at = ?, credential_purge_at = ?, completed_at = COALESCE(completed_at, ?), public_token_expires_at = ?`
+			args = append(args, now, purgeAt, now, tokenExpiry)
 		case "cancelled":
 			query += `, cancelled_at = ?, cancel_reason = ?`
 			args = append(args, now, reason)
@@ -291,7 +292,7 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 			return err
 		}
 		if pickupOverride {
-			return audit.Write(ctx, tx, audit.Entry{
+			if err := audit.Write(ctx, tx, audit.Entry{
 				TenantID:   &tenantID,
 				UserID:     actorID(actor),
 				ActorName:  actor.Name,
@@ -307,7 +308,25 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 					"reason":           overrideReason,
 					"approved_by":      actor.Name,
 				},
-			})
+			}); err != nil {
+				return err
+			}
+		}
+
+		if targetStatus == "picked_up" && s.pickupHook != nil {
+			if err := s.pickupHook(ctx, tx, tenantID, order.OutletID, orderID, order.CustomerID, now); err != nil {
+				return err
+			}
+		}
+		if s.statusHook != nil {
+			if err := s.statusHook(ctx, tx, StatusEvent{
+				TenantID: tenantID, OutletID: order.OutletID, OrderID: orderID,
+				CustomerID: order.CustomerID, TicketNo: order.TicketNo,
+				FromStatus: currentStatus, ToStatus: targetStatus,
+				ActorID: actorID(actor), PickedUpAt: now,
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

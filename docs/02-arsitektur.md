@@ -389,8 +389,13 @@ flowchart TB
 | `CORS_ORIGINS` | `https://fixphone.example.com` | Daftar eksplisit |
 | `UPLOAD_DIR` | `/data/uploads` | Volume |
 | `UPLOAD_MAX_MB` | `5` | |
-| `WA_PROVIDER` | `noop` | `noop`, `fonnte`, `wablas`, `cloud_api` |
-| `WA_API_KEY` | — | Disimpan juga terenkripsi di settings bila diisi via UI |
+| `WA_FONNTE_TOKEN` | — | Token adapter Fonnte; provider aktif dibaca dari `business_settings.wa_provider` |
+| `WA_WABLAS_TOKEN` | — | Token adapter Wablas |
+| `WA_WABLAS_SECRET` | — | Opsional, digabung sebagai `token.secret` |
+| `WA_WABLAS_URL` | `https://console.wablas.com` | Base URL API Wablas |
+| `WORKER_OUTBOX_INTERVAL` | `30s` | Interval drain outbox WhatsApp |
+| `WORKER_REMINDER_INTERVAL` | `15m` | Interval reminder servis/garansi |
+| `WORKER_PURGE_INTERVAL` | `1h` | Interval purge kredensial perangkat |
 | `BACKUP_DIR` | `/data/backups` | |
 | `LOG_LEVEL` | `info` | |
 | `TZ` | `Asia/Jakarta` | Hanya default; perhitungan bisnis per outlet |

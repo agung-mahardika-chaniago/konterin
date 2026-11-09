@@ -25,7 +25,11 @@ export function ThermalLabel({
 }: ThermalLabelProps) {
   const [qrCodeUrl, setQrCodeUrl] = React.useState<string>('');
 
-  const qrTarget = trackingUrl || `https://fixphone.local/track/${order.ticket_no}`;
+  const storedTrackingUrl = 'tracking_url' in order ? order.tracking_url : null;
+  const qrTarget =
+    trackingUrl ||
+    storedTrackingUrl ||
+    `${window.location.origin}/track?ticket=${encodeURIComponent(order.ticket_no)}`;
 
   React.useEffect(() => {
     let active = true;

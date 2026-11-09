@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
-import { useAlertStore } from '@/stores/alert-store';
 
 const COLLAPSE_KEY = 'fixphone.sidebar_collapsed';
 
@@ -28,7 +27,6 @@ function todayLabel(): string {
 export function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const alertCount = useAlertStore((state) => state.alertCount);
   const location = useLocation();
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -102,7 +100,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Topbar
           onOpenMenu={() => setMobileOpen(true)}
           menuOpen={mobileOpen}
-          alertCount={alertCount}
           title="Dashboard"
           subtitle={todayLabel()}
         />

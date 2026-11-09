@@ -364,6 +364,26 @@ func (h *Handler) Timeline(c *gin.Context) {
 	response.Success(c, entries)
 }
 
+// PublicLink returns (and regenerates when needed) the public tracking link.
+func (h *Handler) PublicLink(c *gin.Context) {
+	actor, err := actorFrom(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	id, err := uuidParam(c, "id")
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	link, err := h.service.PublicLink(c.Request.Context(), actor, id)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, link)
+}
+
 // SetCredential stores a device credential.
 func (h *Handler) SetCredential(c *gin.Context) {
 	actor, err := actorFrom(c)

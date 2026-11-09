@@ -338,6 +338,16 @@ type ServiceOrderCreated struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// PublicLink is returned by GET /service-orders/:id/public-link.
+type PublicLink struct {
+	ServiceOrderID string    `json:"service_order_id"`
+	TicketNo       string    `json:"ticket_no"`
+	PublicToken    string    `json:"public_token"`
+	TrackingURL    string    `json:"tracking_url"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	Regenerated    bool      `json:"regenerated"`
+}
+
 // TechnicianOption is used by the intake form and list filter.
 type TechnicianOption struct {
 	ID   string `json:"id"`

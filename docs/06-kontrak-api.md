@@ -685,23 +685,34 @@ Format nomor pembayaran: `PAY-YYMMDD-SEQ` (atomik per outlet per hari).
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/warranties?status&q&expiring_in_days` | `warranty.view` |
+| GET | `/warranties?status&q&outlet_id&expiring_in_days&page&per_page` | `warranty.view` |
 | GET | `/warranties/:id` | `warranty.view` |
 | POST | `/warranties/:id/claims` | `warranty.claim` |
-| GET | `/claims?status` | `warranty.view` |
+| GET | `/claims?status&q&outlet_id&page&per_page` | `warranty.view` |
 | GET | `/claims/:id` | `warranty.view` |
 | PATCH | `/claims/:id` | `warranty.claim` |
 | POST | `/claims/:id/rework` | `service.create` + `warranty.claim` |
 
-Klaim:
+Klaim baru hanya membutuhkan keluhan:
 
 ```json
-{ "complaint": "Layar kembali blank setelah 5 hari",
-  "resolution": "", "status": "submitted" }
+{ "complaint": "Layar kembali blank setelah 5 hari" }
 ```
 
+Ubah status/resolusi:
+
+```json
+{ "status": "approved", "resolution": "" }
+```
+
+Transisi yang diizinkan: `submitted` -> `approved`/`rejected`/`in_progress`,
+`approved` -> `in_progress`/`completed`/`rejected`, dan `in_progress` ->
+`completed`/`rejected`. `resolution` wajib saat status menjadi `completed` atau
+`rejected`.
+
 `POST /claims/:id/rework` membuat service order baru bertipe rework yang tertaut
-ke klaim, tanpa biaya default, dan menyalin data pelanggan/perangkat.
+ke klaim, tanpa biaya default, dan menyalin data pelanggan/perangkat. Satu klaim
+hanya boleh memiliki satu order rework.
 
 ---
 
@@ -808,7 +819,7 @@ Tidak memerlukan autentikasi. Rate limit 10/menit/IP.
 |---|---|---|
 | GET | `/public/track?ticket=FP-261103-0001&phone_last4=7890` | Pencarian aman |
 | GET | `/public/track/:token` | Link langsung dari QR |
-| GET | `/public/store` | Nama, logo, alamat, jam operasional (opsional) |
+| GET | `/public/store?token=...` | Nama dan logo toko untuk token yang valid |
 
 Respons (whitelist):
 
@@ -828,7 +839,7 @@ Respons (whitelist):
     "invoice_status": "partial",
     "payment_status_label": "Belum Lunas",
     "pickup_status": "Belum Diambil",
-    "warranty": { "active": false, "end_date": null }
+    "warranty": { "active": false, "status": "none", "days": 0, "end_date": null }
   }
 }
 ```
@@ -859,15 +870,21 @@ dikembalikan (hanya status `configured: true`).
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/notifications?unread=true` | login |
+| GET | `/notifications?unread=true&page&per_page` | login |
+| GET | `/notifications/unread-count` | login |
 | PATCH | `/notifications/:id/read` | login |
 | POST | `/notifications/read-all` | login |
-| GET | `/whatsapp-messages?status&page` | `settings.manage` |
+| GET | `/whatsapp-messages?status&q&page&per_page` | `settings.manage` |
 | POST | `/whatsapp-messages/:id/retry` | `settings.manage` |
 | POST | `/service-orders/:id/notify` | `service.update` |
 
-`notify` merender template dan memasukkan pesan ke outbox; respons memuat
-`message_id` dan `status`.
+`GET /notifications` juga mengembalikan header `X-Unread-Count`. Broadcast
+tenant memakai read receipt per pengguna; notifikasi personal memakai
+`is_read`/`read_at`.
+
+`notify` merender template (`template_key`) atau memakai `message` kustom, lalu
+memasukkan pesan ke outbox; respons memuat `message_id` dan `status`. Pesan
+berstatus `sent` tidak dapat di-retry (`409 MESSAGE_SENT`).
 
 ---
 

@@ -16,9 +16,16 @@ import { SparepartListPage } from '@/features/inventory/pages/sparepart-list-pag
 import { CashierPage } from '@/features/invoices/pages/cashier-page';
 import { InvoiceDetailPage } from '@/features/invoices/pages/invoice-detail-page';
 import { InvoiceListPage } from '@/features/invoices/pages/invoice-list-page';
+import { NotificationListPage } from '@/features/notifications/pages/notification-list-page';
+import { WhatsAppOutboxPage } from '@/features/notifications/pages/whatsapp-outbox-page';
 import { ServiceCreatePage } from '@/features/services/pages/service-create-page';
 import { ServiceDetailPage } from '@/features/services/pages/service-detail-page';
 import { ServiceListPage } from '@/features/services/pages/service-list-page';
+import { TrackingDetailPage } from '@/features/tracking/pages/tracking-detail-page';
+import { TrackingLookupPage } from '@/features/tracking/pages/tracking-lookup-page';
+import { ClaimDetailPage } from '@/features/warranties/pages/claim-detail-page';
+import { WarrantyDetailPage } from '@/features/warranties/pages/warranty-detail-page';
+import { WarrantyListPage } from '@/features/warranties/pages/warranty-list-page';
 import { ForbiddenPage } from '@/pages/forbidden-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { PlatformPage } from '@/pages/platform-page';
@@ -43,6 +50,8 @@ export function AppRouter() {
           </RequireAuth>
         }
       />
+      <Route path="/track" element={<TrackingLookupPage />} />
+      <Route path="/track/:token" element={<TrackingDetailPage />} />
       <Route
         path="/"
         element={
@@ -214,6 +223,64 @@ export function AppRouter() {
             <PermissionGuard permission="expense.view">
               <AppShell>
                 <ExpenseListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/warranties"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="warranty.view">
+              <AppShell>
+                <WarrantyListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/warranties/:id"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="warranty.view">
+              <AppShell>
+                <WarrantyDetailPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/claims/:id"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="warranty.view">
+              <AppShell>
+                <ClaimDetailPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <RequireAuth>
+            <AppShell>
+              <NotificationListPage />
+            </AppShell>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/whatsapp-outbox"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="settings.manage">
+              <AppShell>
+                <WhatsAppOutboxPage />
               </AppShell>
             </PermissionGuard>
           </RequireAuth>

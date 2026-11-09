@@ -23,6 +23,7 @@ func RegisterRoutes(api *gin.RouterGroup, h *Handler, auth, tenant gin.HandlerFu
 	group.PATCH("/service-orders/:id/status", can("service.status"), h.ChangeStatus)
 	group.POST("/service-orders/:id/assign", can("service.assign"), h.AssignTechnician)
 	group.GET("/service-orders/:id/timeline", can("service.view"), h.Timeline)
+	group.GET("/service-orders/:id/public-link", can("service.view"), h.PublicLink)
 
 	group.GET("/service-orders/:id/diagnostic", can("diagnosis.view"), h.GetDiagnostic)
 	group.PUT("/service-orders/:id/diagnostic", can("diagnosis.manage"), h.UpsertDiagnostic)
