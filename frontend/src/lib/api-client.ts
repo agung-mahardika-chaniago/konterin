@@ -130,3 +130,70 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PATCH', body: body ?? {} }),
   delete: <T>(path: string) => apiRequest<T>(path, { method: 'DELETE' }),
 };
+
+export interface DownloadedFile {
+  blob: Blob;
+  fileName: string;
+}
+
+/**
+ * Downloads a binary attachment (xlsx export, gzip backup) with the same
+ * authentication and outlet headers as the JSON API.
+ */
+export async function apiDownload(path: string, retry = true): Promise<DownloadedFile> {
+  let response: Response;
+  try {
+    response = await requestRaw(path, { method: 'GET' });
+  } catch {
+    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.' });
+  }
+
+  if (response.status === 401 && retry) {
+    const payload = (await response.clone().json().catch(() => null)) as ApiEnvelope<unknown> | null;
+    if (payload?.error?.code === 'TOKEN_EXPIRED') {
+      const session = await refreshSession();
+      if (session) {
+        return apiDownload(path, false);
+      }
+    }
+    notifyUnauthorized();
+    throw new ApiError(response.status, payload?.error ?? { code: 'UNAUTHORIZED', message: 'Sesi Anda berakhir.' });
+  }
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ApiErrorBody | null;
+    throw new ApiError(
+      response.status,
+      payload ?? { code: 'DOWNLOAD_FAILED', message: 'Berkas tidak dapat diunduh. Coba lagi.' },
+    );
+  }
+
+  const blob = await response.blob();
+  return { blob, fileName: fileNameFromDisposition(response.headers.get('Content-Disposition')) ?? 'unduhan' };
+}
+
+function fileNameFromDisposition(disposition: string | null): string | null {
+  if (!disposition) return null;
+  const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1].trim());
+    } catch {
+      return utf8[1].trim();
+    }
+  }
+  const plain = disposition.match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1].trim() : null;
+}
+
+/** Offers a downloaded blob to the browser as a file save. */
+export function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}

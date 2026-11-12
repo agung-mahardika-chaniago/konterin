@@ -11,6 +11,7 @@ import (
 	"fixphone/backend/internal/config"
 	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/middleware"
+	auditviewmod "fixphone/backend/internal/modules/auditview"
 	"fixphone/backend/internal/modules/auth"
 	"fixphone/backend/internal/modules/dashboard"
 	"fixphone/backend/internal/modules/expense"
@@ -19,7 +20,9 @@ import (
 	"fixphone/backend/internal/modules/notification"
 	"fixphone/backend/internal/modules/outlet"
 	"fixphone/backend/internal/modules/payment"
+	"fixphone/backend/internal/modules/report"
 	servicemod "fixphone/backend/internal/modules/service"
+	"fixphone/backend/internal/modules/settings"
 	"fixphone/backend/internal/modules/tracking"
 	"fixphone/backend/internal/modules/user"
 	"fixphone/backend/internal/modules/warranty"
@@ -128,6 +131,9 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		})
 	})
 	trackingModule := tracking.NewService(db)
+	reportModule := report.NewService(db)
+	settingsModule := settings.NewService(db, cfg.BackupDir, cfg.BackupDSN)
+	auditViewer := auditviewmod.NewService(db)
 
 	authMiddleware := middleware.Auth(tokenManager, authService)
 	tenantMiddleware := middleware.Tenant(db)
@@ -155,6 +161,9 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		warranty.RegisterRoutes(api, warranty.NewHandler(warrantyModule), authMiddleware, tenantMiddleware, can)
 		notification.RegisterRoutes(api, notification.NewHandler(notificationModule), authMiddleware, tenantMiddleware, can)
 		tracking.RegisterRoutes(api, tracking.NewHandler(trackingModule), publicLimiter)
+		report.RegisterRoutes(api, report.NewHandler(reportModule), authMiddleware, tenantMiddleware, can)
+		settings.RegisterRoutes(api, settings.NewHandler(settingsModule), authMiddleware, tenantMiddleware, can)
+		auditviewmod.RegisterRoutes(api, auditviewmod.NewHandler(auditViewer), authMiddleware, tenantMiddleware, can)
 	}
 
 	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {

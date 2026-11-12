@@ -59,7 +59,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Kasir', to: '/cashier', icon: ReceiptText, permission: 'payment.view' },
       { label: 'Invoice', to: '/invoices', icon: Wallet, permission: 'invoice.view' },
       { label: 'Pengeluaran', to: '/expenses', icon: Receipt, permission: 'expense.view' },
-      { label: 'Laporan', icon: ClipboardList, permission: 'report.view', stage: 10 },
+      { label: 'Laporan', to: '/reports', icon: ClipboardList, permission: 'report.view' },
     ],
   },
   {
@@ -73,10 +73,10 @@ export const navGroups: NavGroup[] = [
   {
     label: 'Pengaturan',
     items: [
-      { label: 'Pengguna', icon: Users, permission: 'user.view', stage: 11 },
-      { label: 'Outlet', icon: Store, permission: 'outlet.view', stage: 11 },
-      { label: 'Toko', icon: Settings, permission: 'settings.view', stage: 11 },
-      { label: 'Audit Log', icon: ShieldCheck, permission: 'audit.view', stage: 11 },
+      { label: 'Pengguna', to: '/users', icon: Users, permission: 'user.view' },
+      { label: 'Outlet', to: '/outlets', icon: Store, permission: 'outlet.view' },
+      { label: 'Toko', to: '/settings', icon: Settings, permission: 'settings.view' },
+      { label: 'Audit Log', to: '/audit-logs', icon: ShieldCheck, permission: 'audit.view' },
     ],
   },
 ];

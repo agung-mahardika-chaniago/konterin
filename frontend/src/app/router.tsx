@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/app-shell';
+import { AuditLogPage } from '@/features/audit/pages/audit-log-page';
 import { ChangePasswordPage } from '@/features/auth/change-password-page';
 import { LoginPage } from '@/features/auth/login-page';
 import { PermissionGuard } from '@/features/auth/permission-guard';
@@ -18,11 +19,15 @@ import { InvoiceDetailPage } from '@/features/invoices/pages/invoice-detail-page
 import { InvoiceListPage } from '@/features/invoices/pages/invoice-list-page';
 import { NotificationListPage } from '@/features/notifications/pages/notification-list-page';
 import { WhatsAppOutboxPage } from '@/features/notifications/pages/whatsapp-outbox-page';
+import { OutletListPage } from '@/features/outlets/pages/outlet-list-page';
+import { ReportsPage } from '@/features/reports/pages/reports-page';
 import { ServiceCreatePage } from '@/features/services/pages/service-create-page';
 import { ServiceDetailPage } from '@/features/services/pages/service-detail-page';
 import { ServiceListPage } from '@/features/services/pages/service-list-page';
+import { SettingsPage } from '@/features/settings/pages/settings-page';
 import { TrackingDetailPage } from '@/features/tracking/pages/tracking-detail-page';
 import { TrackingLookupPage } from '@/features/tracking/pages/tracking-lookup-page';
+import { UserListPage } from '@/features/users/pages/user-list-page';
 import { ClaimDetailPage } from '@/features/warranties/pages/claim-detail-page';
 import { WarrantyDetailPage } from '@/features/warranties/pages/warranty-detail-page';
 import { WarrantyListPage } from '@/features/warranties/pages/warranty-list-page';
@@ -223,6 +228,66 @@ export function AppRouter() {
             <PermissionGuard permission="expense.view">
               <AppShell>
                 <ExpenseListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="report.view">
+              <AppShell>
+                <ReportsPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="user.view">
+              <AppShell>
+                <UserListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/outlets"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="outlet.view">
+              <AppShell>
+                <OutletListPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="settings.view">
+              <AppShell>
+                <SettingsPage />
+              </AppShell>
+            </PermissionGuard>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/audit-logs"
+        element={
+          <RequireAuth>
+            <PermissionGuard permission="audit.view">
+              <AppShell>
+                <AuditLogPage />
               </AppShell>
             </PermissionGuard>
           </RequireAuth>

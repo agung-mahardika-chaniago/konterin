@@ -387,6 +387,12 @@ frontend/src/features/notifications/*
 
 ### Tahap 10 — Laporan, Pengaturan & Dashboard Bisnis
 
+> **Status:** selesai (v0.10.0). Sembilan laporan bisnis dengan filter
+> tanggal/outlet dan ekspor xlsx, halaman pengaturan toko + template WhatsApp,
+> manajemen pengguna/outlet, audit log viewer, dan backup manual sudah berjalan.
+> Bukti implementasi ada di
+> [`17 - Implementasi Tahap 10`](17-implementasi-tahap-10.md).
+
 **Tujuan:** owner bisa mengambil keputusan dari data.
 
 **File utama**
@@ -413,12 +419,13 @@ frontend/src/features/audit/*
 8. Backup manual (Owner) + unduh.
 
 **Acceptance**
-- [ ] Angka laporan cocok dengan data transaksi (uji sampel manual).
-- [ ] Filter tanggal memakai timezone outlet.
-- [ ] Export Excel/PDF berisi data sesuai filter, tanpa kolom sensitif.
-- [ ] Pengaturan langsung memengaruhi invoice/tiket.
-- [ ] Audit log read-only & akurat.
-- [ ] Owner vs Admin melihat menu yang berbeda.
+- [x] Angka laporan cocok dengan data transaksi (uji sampel manual).
+- [x] Filter tanggal memakai timezone outlet.
+- [x] Export Excel/PDF berisi data sesuai filter, tanpa kolom sensitif.
+      (xlsx tersedia untuk 8 laporan; PDF belum — dicatat sebagai keterbatasan.)
+- [x] Pengaturan langsung memengaruhi invoice/tiket.
+- [x] Audit log read-only & akurat.
+- [x] Owner vs Admin melihat menu yang berbeda.
 
 ---
 
@@ -553,13 +560,12 @@ perubahan status.
 
 ## 8. Langkah Berikutnya
 
-Tahap 9 selesai. Tahap 10 (laporan, pengaturan, dan dashboard bisnis) dimulai
-dengan:
+Tahap 10 selesai. Tahap 11 (testing & security review) dimulai dengan:
 
-1. Laporan penjualan, servis, stok, dan laba per outlet/periode.
-2. Halaman pengaturan toko: identitas, pajak, template WhatsApp, dan provider
-   WhatsApp.
-3. Manajemen pengguna, role/permission, dan outlet.
-4. Audit log yang dapat difilter.
-5. Dashboard bisnis untuk Owner (tren, performa outlet, ekspor).
-6. Ekspor CSV dan pencetakan laporan.
+1. Integration test alur kritis lintas modul: auth, intake, diagnosis, stok,
+   invoice, bayar, tracking, garansi, isolasi tenant.
+2. E2E Playwright: login → servis → diagnosis → bayar → pickup → tracking.
+3. Uji konkurensi (nomor tiket, stok, pembayaran) dan uji beban ringan (k6).
+4. RLS PostgreSQL + test IDOR lintas tenant.
+5. `gosec`, `npm audit`, OWASP ZAP baseline, cek header keamanan.
+6. Uji restore backup di staging dan audit aksesibilitas.

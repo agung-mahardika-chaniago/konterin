@@ -1,17 +1,23 @@
 openapi: 3.1.0
 info:
   title: FixPhone API
-  version: 0.9.0
+  version: 0.10.0
   description: |
-    Kontrak API FixPhone untuk Tahap 9: autentikasi, sesi, RBAC, pengguna,
+    Kontrak API FixPhone untuk Tahap 10: autentikasi, sesi, RBAC, pengguna,
     role, outlet, dashboard, pelanggan, intake servis HP, diagnosis, state
     machine status, item jasa/sparepart, kredensial perangkat, inventori,
     invoice, kasir, pembayaran, pengeluaran, tracking publik, garansi/klaim,
-    notifikasi in-app, dan outbox WhatsApp. Semua waktu memakai ISO-8601 UTC
-    dan semua nominal uang berupa integer rupiah.
+    notifikasi in-app, outbox WhatsApp, laporan bisnis dengan ekspor xlsx,
+    pengaturan bisnis, backup manual, dan audit log. Semua waktu memakai
+    ISO-8601 UTC dan semua nominal uang berupa integer rupiah.
 
-    Tanggal dan rentang pada endpoint dashboard ditafsirkan pada timezone
-    outlet aktif (`outlets.timezone`, default `Asia/Jakarta`).
+    Tanggal dan rentang pada endpoint dashboard dan laporan ditafsirkan pada
+    timezone outlet aktif (`outlets.timezone`, default `Asia/Jakarta`).
+
+    Laporan `/reports/*` selalu di-scope ke satu outlet: parameter `outlet_id`
+    eksplisit menimpa outlet aktif dari header `X-Outlet-Id`, dan agregasi
+    seluruh tenant tidak tersedia lewat API. Rentang tanggal laporan
+    maksimal 370 hari dan default 30 hari terakhir.
 
     Access token dikirim melalui header `Authorization: Bearer <token>`.
     Refresh token hanya disimpan di cookie `fixphone_refresh`
@@ -39,6 +45,9 @@ tags:
   - name: Notifications
   - name: Tracking
   - name: Meta
+  - name: Reports
+  - name: Settings
+  - name: AuditLogs
 
 paths:
   /auth/login:
@@ -2357,6 +2366,541 @@ paths:
         '422':
           $ref: '#/components/responses/Validation'
 
+  /reports/revenue:
+    get:
+      tags: [Reports]
+      summary: Laporan pendapatan
+      description: |
+        Memerlukan permission `report.view` dan hanya tersedia untuk
+        pengguna tenant. Invoice non-draft dan non-void diagregasi per hari,
+        bulan, atau tahun sesuai `period`, dipecah menjadi jasa, sparepart,
+        diskon, serta bagian lunas/belum lunas.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - name: period
+          in: query
+          description: Pengelompokan bucket.
+          schema:
+            type: string
+            enum: [daily, monthly, yearly]
+            default: daily
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Agregasi pendapatan. Dengan `format=xlsx` respons berupa file
+            Excel bernama `laporan-pendapatan-<from>_<to>.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevenueReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/services:
+    get:
+      tags: [Reports]
+      summary: Laporan servis
+      description: |
+        Memerlukan permission `report.view`. Ringkasan order servis pada
+        rentang: total, selesai, dibatalkan, sedang berjalan, rata-rata jam
+        pengerjaan, distribusi status, dan peringkat teknisi.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Ringkasan servis. Dengan `format=xlsx` respons berupa file Excel
+            bernama `laporan-servis-<from>_<to>.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicesReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/brands:
+    get:
+      tags: [Reports]
+      summary: Laporan merek perangkat
+      description: |
+        Memerlukan permission `report.view`. Distribusi order servis dan
+        pendapatan per merek perangkat pada rentang.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Baris merek. Dengan `format=xlsx` respons berupa file Excel
+            bernama `laporan-merek-<from>_<to>.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandsReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/service-vs-parts:
+    get:
+      tags: [Reports]
+      summary: Laporan jasa vs sparepart
+      description: |
+        Memerlukan permission `report.view`. Perbandingan kuantitas dan
+        pendapatan antara item jasa dan item sparepart pada rentang.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Baris tipe item. Dengan `format=xlsx` respons berupa file Excel
+            bernama `laporan-jasa-vs-part-<from>_<to>.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceVsPartsReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/profit:
+    get:
+      tags: [Reports]
+      summary: Laporan laba kotor dan bersih
+      description: |
+        Memerlukan permission `report.profit.view` (owner saja pada seed
+        default). Laba kotor = pendapatan dikurangi HPP sparepart terjual;
+        laba bersih = laba kotor dikurangi total pengeluaran.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Ringkasan laba. Dengan `format=xlsx` respons berupa file Excel
+            bernama `laporan-laba-<from>_<to>.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfitReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/expenses:
+    get:
+      tags: [Reports]
+      summary: Laporan pengeluaran
+      description: |
+        Memerlukan permission `report.profit.view`. Pengeluaran diagregasi
+        per kategori pada rentang, hanya pengeluaran berstatus `posted`.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Baris kategori dan total. Dengan `format=xlsx` respons berupa
+            file Excel bernama `laporan-pengeluaran-<from>_<to>.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpensesReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/technicians:
+    get:
+      tags: [Reports]
+      summary: Laporan produktivitas teknisi
+      description: |
+        Memerlukan permission `report.view`. Per teknisi pada rentang:
+        order yang ditugaskan, selesai, aktif, rata-rata jam reparasi,
+        dan kontribusi pendapatan.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Baris teknisi. Dengan `format=xlsx` respons berupa file Excel
+            bernama `laporan-teknisi-<from>_<to>.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechniciansReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/stock:
+    get:
+      tags: [Reports]
+      summary: Laporan stok sparepart
+      description: |
+        Memerlukan permission `report.view`. Snapshot stok saat ini per
+        sparepart beserta nilai (harga modal) dan penanda stok rendah;
+        `from`/`to` tetap divalidasi tapi tidak mengubah isi snapshot.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportFormat'
+      responses:
+        '200':
+          description: |
+            Baris sparepart dan ringkasan. Dengan `format=xlsx` respons
+            berupa file Excel bernama `laporan-stok.xlsx`.
+          headers:
+            Content-Disposition:
+              description: Hanya ada pada respons xlsx.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockReportEnvelope'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /reports/inventory-valuation:
+    get:
+      tags: [Reports]
+      summary: Valuasi inventori
+      description: |
+        Memerlukan permission `report.profit.view`. Cermin laporan stok
+        (JSON saja, tanpa ekspor xlsx); nilai total memakai harga modal.
+      parameters:
+        - $ref: '#/components/parameters/ReportOutletId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+      responses:
+        '200':
+          description: Baris sparepart dan ringkasan valuasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockReportEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /settings:
+    get:
+      tags: [Settings]
+      summary: Pengaturan bisnis toko
+      description: |
+        Memerlukan permission `settings.view` dan hanya tersedia untuk
+        pengguna tenant. Pengaturan bersifat tenant-level (baris outlet NULL).
+      responses:
+        '200':
+          description: Pengaturan saat ini.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Settings]
+      summary: Ubah sebagian pengaturan bisnis
+      description: |
+        Memerlukan permission `settings.manage`. Hanya field yang dikirim
+        yang diubah; field nullable yang dikirim string kosong akan
+        dikosongkan. Setiap perubahan tercatat di audit log sebagai
+        `settings_update`, dan nilai baru langsung dipakai oleh proses
+        berikutnya (mis. nama toko pada invoice).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsRequest'
+      responses:
+        '200':
+          description: Pengaturan setelah perubahan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /settings/backups:
+    get:
+      tags: [Settings]
+      summary: Riwayat backup manual
+      description: |
+        Memerlukan permission `settings.manage`. Maksimal 50 backup terbaru
+        milik tenant, terbaru dulu.
+      responses:
+        '200':
+          description: Daftar metadata backup.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Settings]
+      summary: Buat backup manual
+      description: |
+        Memerlukan permission `settings.manage`. Tanpa request body. Membuat
+        berkas SQL terkompresi (gzip) berisi semua tabel milik tenant;
+        proses sinkron dan durasinya bergantung pada ukuran data. Percobaan
+        yang berhasil maupun gagal tercatat di audit log.
+      responses:
+        '201':
+          description: Metadata backup yang baru dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /settings/backups/{id}/download:
+    parameters:
+      - $ref: '#/components/parameters/BackupId'
+    get:
+      tags: [Settings]
+      summary: Unduh berkas backup
+      description: |
+        Memerlukan permission `settings.manage`. Mengalirkan berkas gzip
+        berisi dump SQL milik tenant.
+      responses:
+        '200':
+          description: |
+            Berkas backup (application/gzip) dengan nama file pada header
+            `Content-Disposition`.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename*=UTF-8''backup-<tenant>-<waktu>.sql.gz
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Backup belum selesai dibuat (BACKUP_NOT_READY).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /audit-logs:
+    get:
+      tags: [AuditLogs]
+      summary: Jejak audit tenant
+      description: |
+        Memerlukan permission `audit.view` dan hanya tersedia untuk pengguna
+        tenant. Audit log bersifat append-only; endpoint ini hanya membaca.
+        Filter `action` adalah pencarian sebagian (ILIKE); `module` dan
+        `entity_type` mencocokkan persis.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: module
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          description: Pencarian sebagian pada kolom action (ILIKE).
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Tanggal awal (YYYY-MM-DD, inklusif).
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Tanggal akhir (YYYY-MM-DD, inklusif).
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Entri audit terpaginasi, terbaru dulu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+
+  /audit-logs/modules:
+    get:
+      tags: [AuditLogs]
+      summary: Daftar modul pada jejak audit
+      description: |
+        Memerlukan permission `audit.view`. Modul berbeda yang benar-benar
+        ada pada jejak audit tenant, untuk mengisi dropdown filter.
+      responses:
+        '200':
+          description: Nama modul terurut alfabetis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditModuleListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2483,6 +3027,46 @@ components:
       schema:
         type: string
         pattern: '^[0-9a-fA-F]{32}$'
+    ReportOutletId:
+      name: outlet_id
+      in: query
+      description: |
+        UUID outlet target. Bila kosong, laporan memakai outlet aktif dari
+        header `X-Outlet-Id` atau outlet pertama yang dapat diakses.
+      schema:
+        type: string
+        format: uuid
+    ReportFrom:
+      name: from
+      in: query
+      description: |
+        Tanggal awal rentang (YYYY-MM-DD, inklusif) pada timezone outlet.
+        Default 30 hari sebelum `to`. Rentang maksimal 370 hari.
+      schema:
+        type: string
+        format: date
+    ReportTo:
+      name: to
+      in: query
+      description: Tanggal akhir rentang (YYYY-MM-DD, inklusif). Default hari ini.
+      schema:
+        type: string
+        format: date
+    ReportFormat:
+      name: format
+      in: query
+      description: 'Bila `xlsx`, respons adalah file Excel, bukan JSON.'
+      schema:
+        type: string
+        enum: [json, xlsx]
+        default: json
+    BackupId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
 
   responses:
     Unauthorized:
@@ -5222,3 +5806,597 @@ components:
           const: true
         data:
           $ref: '#/components/schemas/NotifyServiceOrderResult'
+    RevenuePoint:
+      type: object
+      description: Satu bucket agregasi pendapatan; juga dipakai sebagai total.
+      properties:
+        label:
+          type: string
+          description: Kunci bucket — YYYY-MM-DD, YYYY-MM, atau YYYY sesuai period.
+          example: '2026-11-11'
+        invoice_count:
+          type: integer
+          format: int64
+        service_count:
+          type: integer
+          format: int64
+        service_amount:
+          type: integer
+          format: int64
+          description: Total rupiah item jasa.
+        part_amount:
+          type: integer
+          format: int64
+          description: Total rupiah item sparepart.
+        discount_amount:
+          type: integer
+          format: int64
+        total_revenue:
+          type: integer
+          format: int64
+        paid_amount:
+          type: integer
+          format: int64
+        unpaid_amount:
+          type: integer
+          format: int64
+    RevenueReport:
+      type: object
+      properties:
+        period:
+          type: string
+          enum: [daily, monthly, yearly]
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevenuePoint'
+        total:
+          $ref: '#/components/schemas/RevenuePoint'
+    RevenueReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/RevenueReport'
+    ServiceStatusRow:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+          format: int64
+    ServiceTechnicianRow:
+      type: object
+      properties:
+        name:
+          type: string
+        count:
+          type: integer
+          format: int64
+    ServicesReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        total:
+          type: integer
+          format: int64
+        cancelled:
+          type: integer
+          format: int64
+        completed:
+          type: integer
+          format: int64
+        in_progress:
+          type: integer
+          format: int64
+        avg_hours:
+          type: number
+          description: Rata-rata jam pengerjaan order selesai.
+        status_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatusRow'
+        technician_rank:
+          type: array
+          description: Peringkat teknisi berdasarkan jumlah order selesai.
+          items:
+            $ref: '#/components/schemas/ServiceTechnicianRow'
+    ServicesReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ServicesReport'
+    BrandRow:
+      type: object
+      properties:
+        brand:
+          type: string
+        count:
+          type: integer
+          format: int64
+        revenue:
+          type: integer
+          format: int64
+    BrandsReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BrandRow'
+    BrandsReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/BrandsReport'
+    ItemTypeRow:
+      type: object
+      properties:
+        item_type:
+          type: string
+          enum: [service, sparepart]
+        qty:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+    ServiceVsPartsReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemTypeRow'
+    ServiceVsPartsReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ServiceVsPartsReport'
+    ProfitReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        revenue:
+          type: integer
+          format: int64
+        cost:
+          type: integer
+          format: int64
+          description: HPP sparepart yang terjual pada rentang.
+        gross_profit:
+          type: integer
+          format: int64
+        expense_total:
+          type: integer
+          format: int64
+        net_profit:
+          type: integer
+          format: int64
+        invoice_count:
+          type: integer
+          format: int64
+        avg_invoice:
+          type: integer
+          format: int64
+    ProfitReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ProfitReport'
+    ExpenseCategoryRow:
+      type: object
+      properties:
+        category:
+          type: string
+        count:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+    ExpensesReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseCategoryRow'
+        total:
+          type: integer
+          format: int64
+    ExpensesReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ExpensesReport'
+    TechnicianRow:
+      type: object
+      properties:
+        name:
+          type: string
+        assigned_count:
+          type: integer
+          format: int64
+        completed_count:
+          type: integer
+          format: int64
+        active_count:
+          type: integer
+          format: int64
+        avg_repair_hours:
+          type: number
+        revenue_contribution:
+          type: integer
+          format: int64
+    TechniciansReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TechnicianRow'
+    TechniciansReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/TechniciansReport'
+    StockRow:
+      type: object
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        stock:
+          type: integer
+          format: int64
+        min_stock:
+          type: integer
+          format: int64
+        cost_price:
+          type: integer
+          format: int64
+        stock_value:
+          type: integer
+          format: int64
+          description: stock × harga modal.
+        is_low:
+          type: boolean
+    StockReport:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockRow'
+        total_value:
+          type: integer
+          format: int64
+        total_items:
+          type: integer
+          format: int64
+        low_stock_rows:
+          type: integer
+          format: int64
+    StockReportEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/StockReport'
+    WATemplates:
+      type: object
+      description: Isi template pesan WhatsApp; variabel template dirender server.
+      properties:
+        status_update:
+          type: string
+        ready_for_pickup:
+          type: string
+        invoice:
+          type: string
+        reminder:
+          type: string
+        warranty:
+          type: string
+        claim_received:
+          type: string
+    Settings:
+      type: object
+      properties:
+        store_name:
+          type: string
+        legal_name:
+          type: [string, 'null']
+        logo_path:
+          type: [string, 'null']
+          description: Upload logo belum tersedia; hanya dibaca.
+        address:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        email:
+          type: [string, 'null']
+        tax_id:
+          type: [string, 'null']
+        timezone:
+          type: string
+        ticket_prefix:
+          type: string
+        ticket_format:
+          type: string
+        invoice_prefix:
+          type: string
+        invoice_format:
+          type: string
+        invoice_terms:
+          type: [string, 'null']
+        invoice_footer:
+          type: [string, 'null']
+        default_service_warranty_days:
+          type: integer
+        default_part_warranty_days:
+          type: integer
+        receipt_paper_width:
+          type: integer
+          description: 58 atau 80.
+        technician_sees_only_assigned:
+          type: boolean
+        public_tracking_enabled:
+          type: boolean
+        wa_provider:
+          type: string
+          enum: [noop, fonnte, wablas]
+        wa_templates:
+          $ref: '#/components/schemas/WATemplates'
+        updated_at:
+          type: string
+          format: date-time
+    SettingsEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Settings'
+    UpdateSettingsRequest:
+      type: object
+      description: |
+        Patch sebagian — hanya field yang dikirim yang diubah. Field nullable
+        yang dikirim berupa string kosong akan dikosongkan dari database.
+      properties:
+        store_name:
+          type: [string, 'null']
+          maxLength: 150
+          description: Tidak boleh kosong atau spasi saja.
+        legal_name:
+          type: [string, 'null']
+          maxLength: 150
+        address:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        email:
+          type: [string, 'null']
+          maxLength: 150
+        tax_id:
+          type: [string, 'null']
+          maxLength: 30
+        timezone:
+          type: [string, 'null']
+          maxLength: 50
+          description: Zona waktu IANA valid, mis. Asia/Jakarta.
+        ticket_prefix:
+          type: [string, 'null']
+          maxLength: 10
+          description: Tidak boleh kosong atau spasi saja.
+        ticket_format:
+          type: [string, 'null']
+          maxLength: 60
+        invoice_prefix:
+          type: [string, 'null']
+          maxLength: 10
+          description: Tidak boleh kosong atau spasi saja.
+        invoice_format:
+          type: [string, 'null']
+          maxLength: 60
+        invoice_terms:
+          type: [string, 'null']
+        invoice_footer:
+          type: [string, 'null']
+        default_service_warranty_days:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 3650
+        default_part_warranty_days:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 3650
+        receipt_paper_width:
+          type: [integer, 'null']
+          description: Hanya 58 atau 80.
+        technician_sees_only_assigned:
+          type: [boolean, 'null']
+        public_tracking_enabled:
+          type: [boolean, 'null']
+        wa_provider:
+          type: [string, 'null']
+          description: noop, fonnte, atau wablas.
+        wa_templates:
+          oneOf:
+            - $ref: '#/components/schemas/WATemplates'
+            - type: 'null'
+    Backup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+          example: backup-0192xxxx-20261111-093000.sql.gz
+        size_bytes:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [completed, failed]
+        table_count:
+          type: integer
+          description: Jumlah tabel yang ikut di-dump.
+        row_count:
+          type: integer
+          format: int64
+          description: Total baris yang ikut di-dump.
+        notes:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: [string, 'null']
+          description: Nama pengguna pembuat backup.
+    BackupEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/Backup'
+    BackupListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Backup'
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        actor_name:
+          type: string
+          description: Nama tampilan aktor; kosong bila ditulis sistem.
+        action:
+          type: string
+          example: settings_update
+        module:
+          type: string
+          example: settings
+        entity_type:
+          type: string
+          example: business_settings
+        entity_id:
+          type: [string, 'null']
+          format: uuid
+          description: Tidak dikirim bila entri tidak terikat entitas.
+        before_data:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Snapshot JSON sebelum perubahan; tidak dikirim bila kosong.
+        after_data:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Snapshot JSON sesudah perubahan; tidak dikirim bila kosong.
+        created_at:
+          type: string
+          format: date-time
+    AuditLogListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AuditLogEntry'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AuditModuleListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            type: string
+          example: [auth, customers, settings, warranty]

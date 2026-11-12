@@ -4,9 +4,9 @@ Aplikasi manajemen usaha servis HP untuk teknisi, toko servis, dan usaha reparas
 Dirancang sebagai **modular monolith** yang siap dikembangkan menjadi produk SaaS
 multi-tenant dan multi-outlet.
 
-> **Status proyek: Tahap 9 — Tracking Publik, Garansi & Notifikasi (selesai, v0.9.0).**
-> Tahap 10 (laporan, pengaturan & dashboard bisnis) berikutnya.
-> Rincian implementasi: [`docs/16-implementasi-tahap-9.md`](docs/16-implementasi-tahap-9.md).
+> **Status proyek: Tahap 10 — Laporan, Pengaturan & Dashboard Bisnis (selesai, v0.10.0).**
+> Tahap 11 (testing & security review) berikutnya.
+> Rincian implementasi: [`docs/17-implementasi-tahap-10.md`](docs/17-implementasi-tahap-10.md).
 
 ---
 

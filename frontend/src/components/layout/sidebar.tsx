@@ -139,7 +139,7 @@ export function Sidebar({ collapsed, mobile = false, onToggleCollapse, onClose }
 
       <div className={cn('shrink-0 border-t border-white/10 p-3', compact && 'flex justify-center')}>
         {mobile ? (
-          <p className="px-2 text-[11px] text-brand-100/40">FixPhone v0.9.0</p>
+          <p className="px-2 text-[11px] text-brand-100/40">FixPhone v0.10.0</p>
         ) : (
           <button
             type="button"

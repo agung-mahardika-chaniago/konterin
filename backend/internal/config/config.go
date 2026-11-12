@@ -40,6 +40,8 @@ type Config struct {
 	CORSOrigins            []string
 	UploadDir              string
 	UploadMaxMB            int
+	BackupDir              string
+	BackupDSN              string
 	SeedSuperadminEmail    string
 	SeedSuperadminPassword string
 	SeedDemo               bool
@@ -61,6 +63,8 @@ func Load() (*Config, error) {
 		DBDSN:      strings.TrimSpace(os.Getenv("DB_DSN")),
 		JWTSecret:  strings.TrimSpace(os.Getenv("JWT_SECRET")),
 		UploadDir:  getEnv("UPLOAD_DIR", "uploads"),
+		BackupDir:  getEnv("BACKUP_DIR", "backups"),
+		BackupDSN:  strings.TrimSpace(os.Getenv("BACKUP_DSN")),
 	}
 
 	var err error

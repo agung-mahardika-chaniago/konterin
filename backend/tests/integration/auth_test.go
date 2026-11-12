@@ -76,6 +76,8 @@ func setupAuthApp(t *testing.T) *authTestApp {
 		UploadDir:         t.TempDir(),
 		UploadMaxMB:       5,
 		AppBaseURL:        "http://127.0.0.1:5173",
+		BackupDir:         t.TempDir(),
+		BackupDSN:         testutil.DSN(),
 	}
 	log := logger.New(slog.LevelError, "test")
 	return &authTestApp{

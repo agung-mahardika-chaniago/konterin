@@ -19,8 +19,8 @@ func TestMigrationUpDownUp(t *testing.T) {
 			  AND table_name <> 'schema_migrations'`).Scan(&tableCount).Error; err != nil {
 			t.Fatalf("count tables: %v", err)
 		}
-		if tableCount != 32 {
-			t.Fatalf("table count = %d, want 32", tableCount)
+		if tableCount != 33 {
+			t.Fatalf("table count = %d, want 33", tableCount)
 		}
 
 		var triggerCount int
