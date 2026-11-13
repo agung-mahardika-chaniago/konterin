@@ -118,6 +118,22 @@ func (s *Service) ListMovements(ctx context.Context, actor Actor, filter Movemen
 		return nil, err
 	}
 
+	// An explicit sparepart filter must reference a sparepart in the caller's
+	// tenant. Returning 404 keeps a foreign id indistinguishable from an
+	// unknown one instead of confirming it through an empty list.
+	if filter.SparepartID != nil {
+		var exists bool
+		if err := s.db.WithContext(ctx).Raw(`
+			SELECT EXISTS (SELECT 1 FROM spareparts
+			WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL)`,
+			*filter.SparepartID, tenantID).Scan(&exists).Error; err != nil {
+			return nil, apperror.Internal(err)
+		}
+		if !exists {
+			return nil, apperror.NotFound("Sparepart tidak ditemukan.")
+		}
+	}
+
 	where := ` WHERE im.tenant_id = ?`
 	args := []any{tenantID}
 

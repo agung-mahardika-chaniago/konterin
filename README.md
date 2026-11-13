@@ -4,9 +4,9 @@ Aplikasi manajemen usaha servis HP untuk teknisi, toko servis, dan usaha reparas
 Dirancang sebagai **modular monolith** yang siap dikembangkan menjadi produk SaaS
 multi-tenant dan multi-outlet.
 
-> **Status proyek: Tahap 10 — Laporan, Pengaturan & Dashboard Bisnis (selesai, v0.10.0).**
-> Tahap 11 (testing & security review) berikutnya.
-> Rincian implementasi: [`docs/17-implementasi-tahap-10.md`](docs/17-implementasi-tahap-10.md).
+> **Status proyek: Tahap 11 — Testing & Security Review (selesai, v0.11.0).**
+> Tahap 12 (deployment production) berikutnya.
+> Rincian implementasi: [`docs/18-implementasi-tahap-11.md`](docs/18-implementasi-tahap-11.md).
 
 ---
 
@@ -14,7 +14,7 @@ multi-tenant dan multi-outlet.
 
 | Lapisan | Teknologi |
 |---|---|
-| Backend | Go 1.24+, Gin, GORM |
+| Backend | Go 1.26+, Gin, GORM |
 | Database | PostgreSQL 16 |
 | Auth | JWT HS256 + refresh token rotasi (cookie HttpOnly) |
 | Frontend | React 18.3 + TypeScript 5.7 + Vite 5 |
@@ -61,6 +61,8 @@ Penjelasan lengkap: [`docs/04-struktur-folder.md`](docs/04-struktur-folder.md).
 | [14 — Implementasi Tahap 7](docs/14-implementasi-tahap-7.md) | Master sparepart, kategori/supplier, pembelian, opname, movement, alert, valuasi, barcode |
 | [15 — Implementasi Tahap 8](docs/15-implementasi-tahap-8.md) | Invoice draft/finalisasi, diskon, pembayaran & idempotency, void, kasir harian, cetak, pengeluaran, pickup lunas |
 | [16 — Implementasi Tahap 9](docs/16-implementasi-tahap-9.md) | Tracking publik & privasi, QR label, garansi otomatis, klaim/rework, notifikasi in-app, outbox WhatsApp, worker reminder & purge |
+| [17 — Implementasi Tahap 10](docs/17-implementasi-tahap-10.md) | Sembilan laporan bisnis, ekspor xlsx, pengaturan toko, pengguna/outlet, audit log, backup manual |
+| [18 — Implementasi Tahap 11](docs/18-implementasi-tahap-11.md) | RLS & IDOR, uji konkurensi, header keamanan, restore drill, Vitest/Playwright, k6, scan dependency, CI |
 | [OpenAPI Tahap 9](docs/openapi.yaml) | Kontrak endpoint auth, user, role, outlet, dashboard, customer, servis, diagnosis, item, inventori, invoice, pembayaran, pengeluaran, tracking publik, garansi/klaim, notifikasi, outbox WA, health |
 
 ## 4. Cara Menjalankan (Development)
@@ -130,6 +132,13 @@ Perintah lain: `go run ./cmd/cli migrate status`, `migrate down --steps 1`,
 `db-drop --name fixphone_test --yes`. Ringkasan lengkap ada di
 [`docs/09-implementasi-tahap-2.md`](docs/09-implementasi-tahap-2.md).
 
+Restore drill penuh (butuh `pg_dump`/`pg_restore`/`psql` di `PATH` atau
+`.dev/tools/pgsql-client`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/restore-drill.ps1
+```
+
 ### 4.3 Frontend
 
 ```powershell
@@ -164,7 +173,9 @@ Pemeriksaan frontend:
 ```powershell
 cd frontend
 npm run typecheck
+npm test          # Vitest unit test
 npm run build
+npm run e2e       # Playwright; butuh API + Vite berjalan
 ```
 
 Perilaku autentikasi, RBAC, dan cara reset password dijelaskan di
@@ -184,7 +195,7 @@ make api
 
 ## 5. Prasyarat Development
 
-- Go **1.24+**
+- Go **1.26+** (repo memakai `toolchain go1.26.11`)
 - PostgreSQL **16+** — portable binary disediakan (`scripts/dev-db.ps1`)
 - Node.js **20+** dan npm **10+** (wajib untuk frontend)
 - Docker Desktop **opsional** untuk parity dengan production

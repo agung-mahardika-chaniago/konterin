@@ -1,0 +1,278 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Disposable PostgreSQL service shared by the backend, E2E, and restore jobs.
+  TEST_DB_DSN: postgres://postgres:postgres@127.0.0.1:55432/fixphone_test?sslmode=disable
+  GOFLAGS: -mod=readonly
+
+jobs:
+  backend:
+    name: Backend build, vet & tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -count=1
+
+  frontend:
+    name: Frontend typecheck, unit tests & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install scanners
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: gosec
+        working-directory: backend
+        run: "$(go env GOPATH)/bin/gosec -quiet ./..."
+
+      - name: govulncheck
+        working-directory: backend
+        run: "$(go env GOPATH)/bin/govulncheck ./..."
+
+      - name: npm audit (production dependencies, fail on high/critical)
+        working-directory: frontend
+        run: npm ci && npm audit --omit=dev --audit-level=high
+
+  restore-drill:
+    name: Backup restore drill
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DB_DSN: postgres://postgres:postgres@127.0.0.1:55432/fixphone_test?sslmode=disable
+      PGPASSWORD: postgres
+      SEED_SUPERADMIN_EMAIL: superadmin@fixphone.local
+      SEED_SUPERADMIN_PASSWORD: Superadmin#12345
+      SEED_SUPERADMIN_NAME: Super Admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install PostgreSQL client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+
+      - name: Prepare schema and demo tenant
+        working-directory: backend
+        run: |
+          go run ./cmd/cli db-create
+          go run ./cmd/cli migrate up
+          go run ./cmd/cli seed
+          go run ./cmd/cli create-tenant \
+            --name "Toko Restore Drill" \
+            --slug "restore-drill" \
+            --owner-name "Owner Drill" \
+            --owner-email "owner@restore.test" \
+            --owner-password "Rahasia123" \
+            --outlet-name "Outlet Drill" \
+            --outlet-code "MAIN"
+
+      - name: Run restore drill
+        run: pwsh -NoProfile -File scripts/restore-drill.ps1 -SourceDSN "$env:DB_DSN"
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DB_DSN: postgres://postgres:postgres@127.0.0.1:55432/fixphone_e2e?sslmode=disable
+      APP_ENV: development
+      APP_PORT: "8080"
+      APP_BASE_URL: http://127.0.0.1:5173
+      LOG_LEVEL: warn
+      JWT_SECRET: ci-only-jwt-secret-at-least-thirty-two-characters
+      APP_ENC_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      CORS_ORIGINS: http://127.0.0.1:5173,http://localhost:5173
+      UPLOAD_DIR: uploads
+      SEED_SUPERADMIN_EMAIL: superadmin@fixphone.local
+      SEED_SUPERADMIN_PASSWORD: Superadmin#12345
+      SEED_SUPERADMIN_NAME: Super Admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Prepare database and owner account
+        working-directory: backend
+        run: |
+          go run ./cmd/cli db-create
+          go run ./cmd/cli migrate up
+          go run ./cmd/cli seed
+          go run ./cmd/cli create-tenant \
+            --name "Toko E2E" \
+            --slug "toko-e2e" \
+            --owner-name "Owner E2E" \
+            --owner-email "owner@fixphone.local" \
+            --owner-password "Owner#12345" \
+            --outlet-name "Outlet Utama" \
+            --outlet-code "MAIN"
+
+      - name: Start API
+        working-directory: backend
+        run: |
+          go build -o /tmp/fixphone-api ./cmd/api
+          nohup /tmp/fixphone-api > /tmp/api.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/healthz > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/api.log
+          exit 1
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Start frontend
+        working-directory: frontend
+        run: |
+          nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/web.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/login > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/web.log
+          exit 1
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:5173
+          E2E_API_URL: http://127.0.0.1:8080/api/v1
+          E2E_EMAIL: owner@fixphone.local
+          E2E_PASSWORD: Owner#12345
+        run: npm run e2e
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          if-no-files-found: ignore

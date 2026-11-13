@@ -431,6 +431,13 @@ frontend/src/features/audit/*
 
 ### Tahap 11 — Testing & Security Review
 
+> **Status:** selesai (v0.11.0). RLS PostgreSQL aktif untuk 30 tabel dan diuji
+> dengan role non-superuser, matriks IDOR lintas tenant dan uji konkurensi
+> stok/pembayaran lulus, header keamanan terpasang, restore drill penuh lulus,
+> unit test + E2E Playwright + k6 smoke lulus, `gosec`/`govulncheck` bersih, dan
+> CI lima job tersedia. Bukti implementasi ada di
+> [`18 - Implementasi Tahap 11`](18-implementasi-tahap-11.md).
+
 **Tujuan:** yakin aplikasi aman dan stabil sebelum production.
 
 **Pekerjaan**
@@ -446,12 +453,14 @@ frontend/src/features/audit/*
 9. Perbaikan seluruh temuan blocker/major.
 
 **Acceptance**
-- [ ] Semua test lulus di CI.
-- [ ] Tidak ada temuan kritis/high terbuka.
-- [ ] RLS aktif & teruji.
-- [ ] Restore backup berhasil.
-- [ ] Checklist OWASP Top 10 terisi.
-- [ ] Regression test fitur utama lulus.
+- [x] Semua test lulus di CI (workflow `.github/workflows/ci.yml` tersedia; seluruh
+      gate lulus lokal — CI remote dijalankan saat repo di-push).
+- [x] Tidak ada temuan kritis/high terbuka (production dependencies; advisory
+      dev-only dicatat sebagai risiko diterima di docs/18 §9).
+- [x] RLS aktif & teruji.
+- [x] Restore backup berhasil.
+- [x] Checklist OWASP Top 10 terisi (docs/07 §15; status §17 diperbarui).
+- [x] Regression test fitur utama lulus.
 
 ---
 

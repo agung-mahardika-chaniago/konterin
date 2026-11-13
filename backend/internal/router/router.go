@@ -52,7 +52,7 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 	r.Use(requestIDMiddleware())
 	r.Use(accessLogMiddleware(log))
 	r.Use(recoveryMiddleware(log))
-	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.SecurityHeaders(cfg.IsProduction()))
 	r.Use(corsMiddleware(cfg.CORSOrigins))
 	r.Use(middleware.CheckOrigin(cfg.CORSOrigins))
 	r.Use(bodyLimitMiddleware(1 << 20)) // 1 MB JSON

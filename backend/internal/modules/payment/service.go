@@ -286,6 +286,12 @@ func (s *Service) ListPayments(ctx context.Context, actor Actor, filter PaymentF
 
 // ListInvoicePayments returns all payments for one invoice.
 func (s *Service) ListInvoicePayments(ctx context.Context, actor Actor, invoiceID uuid.UUID) ([]PaymentListItem, error) {
+	// Verify the invoice belongs to the caller before filtering payments so a
+	// foreign invoice id looks exactly like a missing one (404, not an empty
+	// list that would confirm its existence).
+	if err := s.ensureInvoiceAccess(ctx, actor, invoiceID); err != nil {
+		return nil, err
+	}
 	result, err := s.ListPayments(ctx, actor, PaymentFilter{
 		InvoiceID: invoiceID, Page: 1, PerPage: 100,
 	})
@@ -293,6 +299,24 @@ func (s *Service) ListInvoicePayments(ctx context.Context, actor Actor, invoiceI
 		return nil, err
 	}
 	return result.Items, nil
+}
+
+// ensureInvoiceAccess rejects invoice ids outside the actor's tenant or outlets.
+func (s *Service) ensureInvoiceAccess(ctx context.Context, actor Actor, invoiceID uuid.UUID) error {
+	tenantID, err := actorTenant(actor)
+	if err != nil {
+		return err
+	}
+	var outletID uuid.UUID
+	if err := s.db.WithContext(ctx).Raw(`
+		SELECT outlet_id FROM invoices WHERE id = ? AND tenant_id = ?`,
+		invoiceID, tenantID).Scan(&outletID).Error; err != nil {
+		return apperror.Internal(err)
+	}
+	if outletID == uuid.Nil || !actor.HasOutlet(outletID) {
+		return apperror.NotFound("Invoice tidak ditemukan.")
+	}
+	return nil
 }
 
 type invoiceRow struct {

@@ -10,13 +10,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SecurityHeaders adds conservative browser hardening headers to API responses.
-func SecurityHeaders() gin.HandlerFunc {
+// SecurityHeaders adds conservative browser hardening headers to API
+// responses. HSTS is only emitted when the deployment is served over HTTPS
+// (production); sending it over plain HTTP would be ignored or harmful.
+func SecurityHeaders(enableHSTS bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
-		c.Header("Referrer-Policy", "no-referrer")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Content-Security-Policy",
+			"default-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+		c.Header("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
 		c.Header("Cache-Control", "no-store")
+		if enableHSTS {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		c.Next()
 	}
 }

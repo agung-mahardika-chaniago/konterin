@@ -333,19 +333,22 @@ Kontak darurat dan matriks eskalasi diisi pada Tahap 12.
 
 ## 17. Checklist Keamanan Sebelum Go-Live
 
-- [ ] Semua endpoint memiliki permission & validasi.
-- [ ] Test IDOR lintas tenant & lintas outlet lulus.
-- [ ] RLS aktif dan diuji.
-- [ ] Tidak ada secret di repo/image/log.
+Status per Tahap 11 (12 November 2026). Item production-only tetap terbuka
+sampai Tahap 12.
+
+- [x] Semua endpoint memiliki permission & validasi.
+- [x] Test IDOR lintas tenant & lintas outlet lulus.
+- [x] RLS aktif dan diuji.
+- [x] Tidak ada secret di repo/image/log.
 - [ ] Password default diganti; super admin wajib ganti.
-- [ ] HTTPS + header keamanan terverifikasi.
-- [ ] Rate limit login & tracking terbukti.
-- [ ] PIN tidak muncul di response mana pun (grep + test).
-- [ ] Audit log mencatat aksi sensitif.
-- [ ] Backup otomatis berjalan & restore teruji.
-- [ ] Dependency scan bersih dari critical/high.
-- [ ] `gosec` & `npm audit` ditinjau.
-- [ ] Log tidak memuat data sensitif.
+- [ ] HTTPS + header keamanan terverifikasi (header sudah diuji; TLS production Tahap 12).
+- [x] Rate limit login & tracking terbukti.
+- [x] PIN tidak muncul di response mana pun (grep + test).
+- [x] Audit log mencatat aksi sensitif.
+- [ ] Backup otomatis berjalan & restore teruji (restore drill lulus; jadwal otomatis Tahap 12).
+- [x] Dependency scan bersih dari critical/high.
+- [x] `gosec` & `npm audit` ditinjau.
+- [x] Log tidak memuat data sensitif.
 - [ ] Runbook insiden & kontak tersedia.
 - [ ] Hak akses server (SSH, DB) minimum.
 - [ ] Tidak ada akun/demo data di production.
