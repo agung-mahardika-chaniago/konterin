@@ -1,6 +1,6 @@
 # 05 — Roadmap Implementasi MVP
 
-**Versi:** 1.0 (Tahap 1) · **Target rilis MVP:** v1.0.0
+**Versi:** 1.1 (Tahap 12 selesai) · **Rilis:** v1.0.0
 **Metode:** incremental, setiap tahap harus **berjalan, teruji, dan terhubung
 end-to-end** sebelum lanjut.
 
@@ -579,14 +579,25 @@ perubahan status.
 
 ---
 
-## 8. Langkah Berikutnya
+## 8. Status Rilis & Langkah Berikutnya
 
-Tahap 10 selesai. Tahap 11 (testing & security review) dimulai dengan:
+**Status: seluruh 12 tahap selesai — v1.0.0 siap go-live.**
 
-1. Integration test alur kritis lintas modul: auth, intake, diagnosis, stok,
-   invoice, bayar, tracking, garansi, isolasi tenant.
-2. E2E Playwright: login → servis → diagnosis → bayar → pickup → tracking.
-3. Uji konkurensi (nomor tiket, stok, pembayaran) dan uji beban ringan (k6).
-4. RLS PostgreSQL + test IDOR lintas tenant.
-5. `gosec`, `npm audit`, OWASP ZAP baseline, cek header keamanan.
-6. Uji restore backup di staging dan audit aksesibilitas.
+Kode, migrasi, dokumentasi, dan gate pengujian sudah lengkap. Langkah berikutnya
+bersifat operasional, bukan pengembangan fitur:
+
+1. Push repositori dan jalankan CI; job `images` dan `deploy-smoke` memvalidasi
+   build container, TLS lokal, RLS, backup, dan smoke test production.
+2. Siapkan server serta DNS, lalu ikuti checklist go-live di
+   [`20 — Runbook Operasional`](20-runbook-operasional.md) §13.
+3. Buat tenant pertama tanpa data demo, jalankan smoke test dari luar server,
+   dan verifikasi backup + restore drill.
+4. Latih admin, teknisi, dan kasir memakai
+   [`21 — Panduan Pengguna`](21-panduan-pengguna.md).
+5. Setelah operasi stabil, tinjau RPO/RTO dan aktifkan PITR/WAL archiving bila
+   dibutuhkan.
+
+Calon v1.1 (lihat [`01 — Analisis Kebutuhan`](01-analisis-kebutuhan.md) §10):
+2FA, payment gateway/refund, transfer stok antar outlet, notifikasi WA otomatis
+penuh, kiosk mode, loyalty, dan PITR. Item cut line Tahap 10 juga dapat
+dipertimbangkan: barcode/CSV, multi-outlet UI lanjutan, dan PWA install prompt.
