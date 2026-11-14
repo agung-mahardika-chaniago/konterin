@@ -232,6 +232,7 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          output: trivy-backend.txt
 
       - name: Scan frontend image (CRITICAL)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -241,6 +242,7 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          output: trivy-frontend.txt
 
       - name: Scan backup image (CRITICAL)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -250,19 +252,34 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          output: trivy-backup.txt
 
       - name: Report Trivy findings
         if: failure()
         run: |
-          for image in fixphone-backend:ci fixphone-frontend:ci fixphone-backup:ci; do
-            echo "--- scan $image ---"
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
-              image --quiet --severity CRITICAL --ignore-unfixed --format table "$image" 2>&1 | tail -n 40 |
-              while IFS= read -r line; do
-                echo "$line"
-                echo "::error::trivy ${image}: ${line:0:860}"
+          for f in trivy-backend.txt trivy-frontend.txt trivy-backup.txt; do
+            if [ ! -f "$f" ]; then
+              echo "::error::laporan scan tidak ditemukan: $f"
+              continue
+            fi
+            echo "--- $f ---"
+            grep -E 'CVE-|Total:' "$f" | head -n 40 | while IFS= read -r line; do
+              echo "::error::${f}: ${line:0:860}"
+            done || true
+            if ! grep -q 'CVE-' "$f"; then
+              tail -n 10 "$f" | while IFS= read -r line; do
+                echo "::error::${f} tail: ${line:0:840}"
               done || true
+            fi
           done
+
+      - name: Upload Trivy reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-reports
+          path: trivy-*.txt
+          if-no-files-found: ignore
 
   deploy-smoke:
     name: Production stack smoke test
@@ -361,7 +378,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends jq
-          ./scripts/smoke-prod.sh
+          bash ./scripts/smoke-prod.sh
 
       - name: OWASP ZAP baseline (advisory)
         continue-on-error: true
