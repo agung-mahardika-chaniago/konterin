@@ -263,14 +263,19 @@ jobs:
               continue
             fi
             echo "--- $f ---"
-            grep -E 'CVE-|Total:' "$f" | head -n 40 | while IFS= read -r line; do
-              echo "::error::${f}: ${line:0:860}"
-            done || true
-            if ! grep -q 'CVE-' "$f"; then
-              tail -n 10 "$f" | while IFS= read -r line; do
-                echo "::error::${f} tail: ${line:0:840}"
-              done || true
-            fi
+            cat "$f" || true
+            # Emit the CVE rows as a single multi-line annotation so the public
+            # check-run API exposes the findings without admin log access.
+            python3 - "$f" <<'PY'
+          import pathlib, sys, urllib.parse
+          path = pathlib.Path(sys.argv[1])
+          lines = path.read_text(errors="replace").splitlines()
+          keep = [l for l in lines if "CVE-" in l or "Total:" in l]
+          if not keep:
+              keep = lines[-6:]
+          msg = "\n".join(keep)[:16000]
+          print("::error title=Trivy %s::%s" % (path.name, urllib.parse.quote(msg, safe="")))
+          PY
           done
 
       - name: Upload Trivy reports
