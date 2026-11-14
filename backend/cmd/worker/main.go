@@ -45,7 +45,9 @@ func main() {
 	} else {
 		opts.LogLevel = gormlogger.Warn
 	}
-	db, err := database.Open(ctx, cfg.DBDSN, opts)
+	// The worker processes every tenant (reminders, outbox, retention) and
+	// therefore uses the privileged pool, not the RLS application role.
+	db, err := database.Open(ctx, cfg.AdminDSN(), opts)
 	if err != nil {
 		log.Error("database_connection_failed", "error", err)
 		os.Exit(1)

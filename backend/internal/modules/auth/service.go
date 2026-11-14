@@ -215,7 +215,7 @@ func (s *Service) Refresh(ctx context.Context, rawToken string, meta Meta) (*Ses
 	var revokedFamily uuid.UUID
 	var newSession *Session
 
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		err := tx.Raw(`
 			SELECT id, user_id, token_hash, family_id, expires_at, revoked_at, replaced_by_id, ip, user_agent, created_at
 			FROM refresh_tokens WHERE token_hash = ? FOR UPDATE`, hash).Scan(&record).Error
@@ -420,7 +420,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, input Ch
 	if err != nil {
 		return apperror.Internal(err)
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			UPDATE users
 			SET password_hash = ?, must_change_password = false,

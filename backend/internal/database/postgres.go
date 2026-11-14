@@ -39,6 +39,10 @@ func Open(ctx context.Context, dsn string, opts OpenOptions) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger:  gormlogger.Default.LogMode(opts.LogLevel),
 		NowFunc: func() time.Time { return time.Now().UTC() },
+		// Writes run in the caller's transaction. Disabling GORM's implicit
+		// per-statement transaction keeps request-scoped RLS transactions from
+		// being committed halfway through a handler.
+		SkipDefaultTransaction: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("membuka koneksi database: %w", err)
@@ -99,5 +103,5 @@ func WithTx(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error 
 	if db == nil {
 		return errors.New("database tidak tersedia")
 	}
-	return db.WithContext(ctx).Transaction(fn)
+	return WithContext(ctx, db).Transaction(fn)
 }

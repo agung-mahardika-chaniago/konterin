@@ -32,6 +32,26 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if cfg.AutoMigrate {
+		migrator, err := database.NewMigrator(cfg.MigrationDSN())
+		if err != nil {
+			log.Error("auto_migrate_init_failed", "error", err)
+			os.Exit(1)
+		}
+		if err := migrator.Up(); err != nil {
+			_ = migrator.Close()
+			log.Error("auto_migrate_failed", "error", err)
+			os.Exit(1)
+		}
+		versionApplied, dirty, err := migrator.Status()
+		_ = migrator.Close()
+		if err != nil {
+			log.Error("auto_migrate_status_failed", "error", err)
+			os.Exit(1)
+		}
+		log.Info("auto_migrate_done", "version", versionApplied, "dirty", dirty)
+	}
+
 	opts := database.DefaultOpenOptions()
 	opts.MaxOpenConns = cfg.DBMaxOpenConns
 	opts.MaxIdleConns = cfg.DBMaxIdleConns
@@ -54,7 +74,22 @@ func main() {
 		}
 	}()
 
-	engine := router.New(cfg, db, log)
+	adminDB := db
+	if cfg.AdminDSN() != cfg.DBDSN {
+		adminDB, err = database.Open(ctx, cfg.AdminDSN(), opts)
+		if err != nil {
+			log.Error("admin_database_connection_failed", "error", err)
+			os.Exit(1)
+		}
+		defer func() {
+			if err := database.Close(adminDB); err != nil {
+				log.Warn("admin_database_close_failed", "error", err)
+			}
+		}()
+		log.Info("database_roles_split", "rls_only", true)
+	}
+
+	engine := router.NewWithDatabases(cfg, db, adminDB, log)
 	server := &http.Server{
 		Addr:              ":" + cfg.AppPort,
 		Handler:           engine,

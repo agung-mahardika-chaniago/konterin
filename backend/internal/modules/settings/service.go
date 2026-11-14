@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -17,9 +18,9 @@ import (
 
 // Service implements settings and backup operations.
 type Service struct {
-	db         *gorm.DB
-	backupDir  string
-	backupDSN  string
+	db        *gorm.DB
+	backupDir string
+	backupDSN string
 }
 
 // NewService builds the settings module.
@@ -95,7 +96,7 @@ func (r settingsRow) toSettings() (*Settings, error) {
 	return &Settings{
 		StoreName: r.StoreName, LegalName: r.LegalName, LogoPath: r.LogoPath,
 		Address: r.Address, Phone: r.Phone, Email: r.Email, TaxID: r.TaxID,
-		Timezone: r.Timezone,
+		Timezone:     r.Timezone,
 		TicketPrefix: r.TicketPrefix, TicketFormat: r.TicketFormat,
 		InvoicePrefix: r.InvoicePrefix, InvoiceFormat: r.InvoiceFormat,
 		InvoiceTerms: r.InvoiceTerms, InvoiceFooter: r.InvoiceFooter,
@@ -202,7 +203,7 @@ func (s *Service) Update(ctx context.Context, actor Actor, input UpdateSettingsR
 	var templatesJSON []byte
 	if input.WATemplates != nil {
 		templatesJSON, err = json.Marshal(map[string]string{
-			"status_update":   input.WATemplates.StatusUpdate,
+			"status_update":    input.WATemplates.StatusUpdate,
 			"ready_for_pickup": input.WATemplates.ReadyPickup,
 			"invoice":          input.WATemplates.Invoice,
 			"reminder":         input.WATemplates.Reminder,
@@ -215,7 +216,7 @@ func (s *Service) Update(ctx context.Context, actor Actor, input UpdateSettingsR
 	}
 
 	var updated *Settings
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var current settingsRow
 		if err := tx.Raw(`
 			SELECT `+settingsColumns+`
@@ -336,15 +337,15 @@ func (s *Service) ListBackups(ctx context.Context, actor Actor) ([]Backup, error
 		return nil, err
 	}
 	var rows []struct {
-		ID          uuid.UUID `gorm:"column:id"`
-		FileName    string    `gorm:"column:file_name"`
-		SizeBytes   int64     `gorm:"column:size_bytes"`
-		Status      string    `gorm:"column:status"`
-		TableCount  int       `gorm:"column:table_count"`
-		RowCount    int64     `gorm:"column:row_count"`
-		Notes       *string   `gorm:"column:notes"`
-		CreatedAt   time.Time `gorm:"column:created_at"`
-		CreatedBy   *string  `gorm:"column:created_by"`
+		ID         uuid.UUID `gorm:"column:id"`
+		FileName   string    `gorm:"column:file_name"`
+		SizeBytes  int64     `gorm:"column:size_bytes"`
+		Status     string    `gorm:"column:status"`
+		TableCount int       `gorm:"column:table_count"`
+		RowCount   int64     `gorm:"column:row_count"`
+		Notes      *string   `gorm:"column:notes"`
+		CreatedAt  time.Time `gorm:"column:created_at"`
+		CreatedBy  *string   `gorm:"column:created_by"`
 	}
 	if err := s.db.WithContext(ctx).Raw(`
 		SELECT b.id, b.file_name, b.size_bytes, b.status, b.table_count,

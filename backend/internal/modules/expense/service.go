@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 	"fixphone/backend/internal/pkg/docnum"
@@ -243,7 +244,7 @@ func (s *Service) CreateExpense(ctx context.Context, actor Actor, input CreateEx
 	notes := trimOptional(input.Notes)
 
 	var expenseID uuid.UUID
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC()
 		number, numberErr := docnum.Next(ctx, tx, tenantID, outletID, "expense",
 			"EXP", "{PREFIX}-{YYMMDD}-{SEQ:4}", now)
@@ -306,7 +307,7 @@ func (s *Service) UpdateExpense(ctx context.Context, actor Actor, expenseID uuid
 		return nil, err
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var current expenseRow
 		if err := tx.Raw(`
 			SELECT e.id, e.expense_no, e.category_id, e.outlet_id, e.description,
@@ -417,7 +418,7 @@ func (s *Service) DeleteExpense(ctx context.Context, actor Actor, expenseID uuid
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var current expenseRow
 		if err := tx.Raw(`
 			SELECT e.id, e.expense_no, e.outlet_id, e.description, e.amount, e.expense_date
@@ -504,7 +505,7 @@ func (s *Service) CreateCategory(ctx context.Context, actor Actor, input CreateC
 		return nil, apperror.Internal(idErr)
 	}
 	now := time.Now().UTC()
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			INSERT INTO expense_categories (id, tenant_id, name, is_system, created_at, updated_at)
 			VALUES (?, ?, ?, false, ?, ?)`, categoryID, tenantID, name, now, now).Error; err != nil {

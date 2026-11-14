@@ -70,7 +70,7 @@ func (h *Handler) Update(c *gin.Context) {
 	if err := validator.Bind(c, &body, map[string]string{
 		"store_name": "Nama toko", "legal_name": "Nama badan usaha",
 		"address": "Alamat", "phone": "Telepon", "email": "Email", "tax_id": "NPWP",
-		"timezone": "Zona waktu",
+		"timezone":      "Zona waktu",
 		"ticket_prefix": "Prefiks tiket", "ticket_format": "Format tiket",
 		"invoice_prefix": "Prefiks invoice", "invoice_format": "Format invoice",
 		"invoice_terms": "Syarat invoice", "invoice_footer": "Catatan kaki invoice",

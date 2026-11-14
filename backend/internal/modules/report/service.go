@@ -27,13 +27,13 @@ func NewService(db *gorm.DB) *Service { return &Service{db: db} }
 
 // reportScope resolves the tenant/outlet filter for a request.
 type reportScope struct {
-	TenantID  uuid.UUID
-	OutletID  *uuid.UUID
-	Loc       *time.Location
-	From      time.Time
-	To        time.Time
-	FromKey   string
-	ToKey     string
+	TenantID uuid.UUID
+	OutletID *uuid.UUID
+	Loc      *time.Location
+	From     time.Time
+	To       time.Time
+	FromKey  string
+	ToKey    string
 }
 
 // resolveScope validates the requested outlet, resolves the outlet timezone,
@@ -177,15 +177,15 @@ func (s *Service) Revenue(ctx context.Context, filter Filter, period Period) (*R
 	bucketExpr := sc.periodExpr("i.issued_at", period)
 
 	type row struct {
-		Bucket          time.Time `gorm:"column:bucket"`
-		InvoiceCount    int64     `gorm:"column:invoice_count"`
-		ServiceCount    int64     `gorm:"column:service_count"`
-		ServiceAmount   int64     `gorm:"column:service_amount"`
-		PartAmount      int64     `gorm:"column:part_amount"`
-		DiscountAmount  int64     `gorm:"column:discount_amount"`
-		TotalRevenue    int64     `gorm:"column:total_revenue"`
-		PaidAmount      int64     `gorm:"column:paid_amount"`
-		UnpaidAmount    int64     `gorm:"column:unpaid_amount"`
+		Bucket         time.Time `gorm:"column:bucket"`
+		InvoiceCount   int64     `gorm:"column:invoice_count"`
+		ServiceCount   int64     `gorm:"column:service_count"`
+		ServiceAmount  int64     `gorm:"column:service_amount"`
+		PartAmount     int64     `gorm:"column:part_amount"`
+		DiscountAmount int64     `gorm:"column:discount_amount"`
+		TotalRevenue   int64     `gorm:"column:total_revenue"`
+		PaidAmount     int64     `gorm:"column:paid_amount"`
+		UnpaidAmount   int64     `gorm:"column:unpaid_amount"`
 	}
 	args := append([]any{sc.TenantID, sc.From, sc.To.AddDate(0, 0, 1)}, outletArgs...)
 	var rows []row
@@ -238,11 +238,11 @@ func (s *Service) Services(ctx context.Context, filter Filter) (*ServicesReport,
 	outletSQL, outletArgs := sc.outletClause("so")
 
 	var totals struct {
-		Total     int64   `gorm:"column:total"`
-		Cancelled int64   `gorm:"column:cancelled"`
-		Completed int64   `gorm:"column:completed"`
-		InProgress int64  `gorm:"column:in_progress"`
-		AvgHours  float64 `gorm:"column:avg_hours"`
+		Total      int64   `gorm:"column:total"`
+		Cancelled  int64   `gorm:"column:cancelled"`
+		Completed  int64   `gorm:"column:completed"`
+		InProgress int64   `gorm:"column:in_progress"`
+		AvgHours   float64 `gorm:"column:avg_hours"`
 	}
 	if err := s.db.WithContext(ctx).Raw(`
 		SELECT count(*)::bigint AS total,
@@ -407,7 +407,7 @@ func (s *Service) Profit(ctx context.Context, filter Filter) (*ProfitReport, err
 	return &ProfitReport{
 		From: sc.FromKey, To: sc.ToKey,
 		Revenue: revenue.Revenue, Cost: revenue.Cost,
-		GrossProfit: revenue.Revenue - revenue.Cost,
+		GrossProfit:  revenue.Revenue - revenue.Cost,
 		ExpenseTotal: expenseTotal,
 		NetProfit:    revenue.Revenue - revenue.Cost - expenseTotal,
 		InvoiceCount: revenue.InvoiceCount, AvgInvoice: avgInvoice,

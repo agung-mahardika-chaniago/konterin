@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 	"fixphone/backend/internal/pkg/docnum"
@@ -17,7 +18,7 @@ import (
 
 // Service implements warranties, claims, and rework orders.
 type Service struct {
-	db           *gorm.DB
+	db            *gorm.DB
 	claimNotifier func(context.Context, *gorm.DB, uuid.UUID, uuid.UUID, uuid.UUID) error
 }
 
@@ -52,26 +53,26 @@ func (s *Service) expireStale(ctx context.Context, q *gorm.DB, tenantID uuid.UUI
 }
 
 type warrantyRow struct {
-	ID           uuid.UUID `gorm:"column:id"`
-	WarrantyNo   string    `gorm:"column:warranty_no"`
-	Type         string    `gorm:"column:type"`
-	Status       string    `gorm:"column:status"`
-	StartDate    time.Time `gorm:"column:start_date"`
-	EndDate      time.Time `gorm:"column:end_date"`
-	Days         int       `gorm:"column:days"`
-	Terms        *string   `gorm:"column:terms"`
-	CreatedAt    time.Time `gorm:"column:created_at"`
-	CustomerID   uuid.UUID `gorm:"column:customer_id"`
-	CustomerName string    `gorm:"column:customer_name"`
-	CustomerPhone string   `gorm:"column:customer_phone"`
+	ID             uuid.UUID `gorm:"column:id"`
+	WarrantyNo     string    `gorm:"column:warranty_no"`
+	Type           string    `gorm:"column:type"`
+	Status         string    `gorm:"column:status"`
+	StartDate      time.Time `gorm:"column:start_date"`
+	EndDate        time.Time `gorm:"column:end_date"`
+	Days           int       `gorm:"column:days"`
+	Terms          *string   `gorm:"column:terms"`
+	CreatedAt      time.Time `gorm:"column:created_at"`
+	CustomerID     uuid.UUID `gorm:"column:customer_id"`
+	CustomerName   string    `gorm:"column:customer_name"`
+	CustomerPhone  string    `gorm:"column:customer_phone"`
 	ServiceOrderID uuid.UUID `gorm:"column:service_order_id"`
-	TicketNo     string    `gorm:"column:ticket_no"`
-	ServiceStatus string   `gorm:"column:service_status"`
-	DeviceBrand  string    `gorm:"column:device_brand"`
-	DeviceModel  string    `gorm:"column:device_model"`
-	OutletID     uuid.UUID `gorm:"column:outlet_id"`
-	OutletName   string    `gorm:"column:outlet_name"`
-	ClaimCount   int64     `gorm:"column:claim_count"`
+	TicketNo       string    `gorm:"column:ticket_no"`
+	ServiceStatus  string    `gorm:"column:service_status"`
+	DeviceBrand    string    `gorm:"column:device_brand"`
+	DeviceModel    string    `gorm:"column:device_model"`
+	OutletID       uuid.UUID `gorm:"column:outlet_id"`
+	OutletName     string    `gorm:"column:outlet_name"`
+	ClaimCount     int64     `gorm:"column:claim_count"`
 }
 
 const warrantySelect = `
@@ -92,11 +93,11 @@ func warrantyFromRow(row warrantyRow) Warranty {
 		ID: row.ID.String(), WarrantyNo: row.WarrantyNo, Type: row.Type,
 		Status: row.Status, StartDate: row.StartDate.Format("2006-01-02"),
 		EndDate: row.EndDate.Format("2006-01-02"), Days: row.Days, Terms: row.Terms,
-		Customer: CustomerRef{ID: row.CustomerID.String(), Name: row.CustomerName, Phone: row.CustomerPhone},
-		Device:   DeviceRef{Brand: row.DeviceBrand, Model: row.DeviceModel},
+		Customer:     CustomerRef{ID: row.CustomerID.String(), Name: row.CustomerName, Phone: row.CustomerPhone},
+		Device:       DeviceRef{Brand: row.DeviceBrand, Model: row.DeviceModel},
 		ServiceOrder: ServiceRef{ID: row.ServiceOrderID.String(), TicketNo: row.TicketNo, Status: row.ServiceStatus},
-		Outlet:   OutletRef{ID: row.OutletID.String(), Name: row.OutletName},
-		ClaimCount: row.ClaimCount, CreatedAt: row.CreatedAt,
+		Outlet:       OutletRef{ID: row.OutletID.String(), Name: row.OutletName},
+		ClaimCount:   row.ClaimCount, CreatedAt: row.CreatedAt,
 	}
 	return item
 }
@@ -266,12 +267,12 @@ func claimFromRow(row claimRow) Claim {
 	item := Claim{
 		ID: row.ID.String(), ClaimNo: row.ClaimNo, WarrantyID: row.WarrantyID.String(),
 		WarrantyNo: row.WarrantyNo, Status: row.Status, Complaint: row.Complaint,
-		Resolution: row.Resolution,
-		Customer: CustomerRef{ID: row.CustomerID.String(), Name: row.CustomerName, Phone: row.CustomerPhone},
-		Device: DeviceRef{Brand: row.DeviceBrand, Model: row.DeviceModel},
+		Resolution:   row.Resolution,
+		Customer:     CustomerRef{ID: row.CustomerID.String(), Name: row.CustomerName, Phone: row.CustomerPhone},
+		Device:       DeviceRef{Brand: row.DeviceBrand, Model: row.DeviceModel},
 		ServiceOrder: ServiceRef{ID: row.ServiceOrderID.String(), TicketNo: row.TicketNo, Status: row.ServiceStatus},
-		Outlet: OutletRef{ID: row.OutletID.String(), Name: row.OutletName},
-		HandledBy: row.HandledBy, ClaimedAt: row.ClaimedAt, ResolvedAt: row.ResolvedAt,
+		Outlet:       OutletRef{ID: row.OutletID.String(), Name: row.OutletName},
+		HandledBy:    row.HandledBy, ClaimedAt: row.ClaimedAt, ResolvedAt: row.ResolvedAt,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 	if row.ReworkID != nil && row.ReworkTicketNo != nil {
@@ -299,7 +300,7 @@ func (s *Service) CreateClaim(ctx context.Context, actor Actor, warrantyID uuid.
 	}
 
 	var claimID uuid.UUID
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var row struct {
 			ID         uuid.UUID `gorm:"column:id"`
 			OutletID   uuid.UUID `gorm:"column:outlet_id"`
@@ -462,12 +463,12 @@ func (s *Service) UpdateClaim(ctx context.Context, actor Actor, id uuid.UUID, in
 		target = strings.ToLower(strings.TrimSpace(*input.Status))
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var row struct {
-			ID       uuid.UUID `gorm:"column:id"`
-			OutletID uuid.UUID `gorm:"column:outlet_id"`
-			Status   string    `gorm:"column:status"`
-			Resolution *string `gorm:"column:resolution"`
+			ID         uuid.UUID `gorm:"column:id"`
+			OutletID   uuid.UUID `gorm:"column:outlet_id"`
+			Status     string    `gorm:"column:status"`
+			Resolution *string   `gorm:"column:resolution"`
 		}
 		if err := tx.Raw(`
 			SELECT id, outlet_id, status, resolution FROM warranty_claims
@@ -512,7 +513,7 @@ func (s *Service) CreateRework(ctx context.Context, actor Actor, claimID uuid.UU
 		return nil, err
 	}
 	var result ReworkResult
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var claim struct {
 			ID             uuid.UUID  `gorm:"column:id"`
 			ClaimNo        string     `gorm:"column:claim_no"`

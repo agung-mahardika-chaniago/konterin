@@ -347,4 +347,3 @@ func workbookBytes(f *excelize.File) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
-

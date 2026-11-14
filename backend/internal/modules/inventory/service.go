@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -321,7 +322,7 @@ func (s *Service) CreateSparepart(ctx context.Context, actor Actor, input Create
 		}
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := s.validateCategory(ctx, tx, tenantID, categoryID); err != nil {
 			return err
 		}
@@ -419,7 +420,7 @@ func (s *Service) UpdateSparepart(ctx context.Context, actor Actor, id uuid.UUID
 	}
 	now := time.Now().UTC()
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var row sparepartRow
 		if err := tx.WithContext(ctx).Raw(`
 			SELECT id, sku, barcode, name, category_id, supplier_id, compatible_models,
@@ -566,7 +567,7 @@ func (s *Service) DeleteSparepart(ctx context.Context, actor Actor, id uuid.UUID
 	}
 	now := time.Now().UTC()
 
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var row struct {
 			ID   uuid.UUID `gorm:"column:id"`
 			SKU  string    `gorm:"column:sku"`

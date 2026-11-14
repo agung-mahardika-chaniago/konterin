@@ -1,0 +1,362 @@
+# FixPhone production stack.
+#
+#   cp .env.production.example .env.production && edit
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+#
+# Compose starts PostgreSQL, runs one-shot migrations/seed/RLS bootstrap, then
+# brings up the API, worker, web, and TLS edge. Optional monitoring/backup
+# profiles are documented in docs/20-runbook-operasional.md.
+name: fixphone
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-backend-build: &backend-build
+  context: .
+  dockerfile: deploy/docker/backend.Dockerfile
+  args:
+    VERSION: ${FIXPHONE_VERSION:-1.0.0}
+    COMMIT: ${GIT_COMMIT:-unknown}
+    BUILD_DATE: ${BUILD_DATE:-unknown}
+
+x-backend-env: &backend-env
+  APP_ENV: production
+  APP_PORT: "8080"
+  APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL wajib diisi}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  TZ: ${TZ:-Asia/Jakarta}
+  DB_DSN: ${DB_DSN:?DB_DSN (role aplikasi) wajib diisi}
+  DB_ADMIN_DSN: ${DB_ADMIN_DSN:?DB_ADMIN_DSN (pemilik skema) wajib diisi}
+  DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-25}
+  DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-5}
+  DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-30m}
+  DB_CONN_MAX_IDLE_TIME: ${DB_CONN_MAX_IDLE_TIME:-5m}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi}
+  APP_ENC_KEY: ${APP_ENC_KEY:?APP_ENC_KEY wajib diisi}
+  ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+  REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-720h}
+  LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+  LOGIN_LOCK_DURATION: ${LOGIN_LOCK_DURATION:-15m}
+  LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-5}
+  LOGIN_RATE_WINDOW: ${LOGIN_RATE_WINDOW:-1m}
+  CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS wajib diisi}
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.16.0.0/12}
+  UPLOAD_DIR: /app/uploads
+  UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-5}
+  BACKUP_DIR: /app/backups
+  BACKUP_DSN: ${BACKUP_DSN:-}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-Super Admin}
+  SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:?SEED_SUPERADMIN_EMAIL wajib diisi}
+  SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?SEED_SUPERADMIN_PASSWORD wajib diisi}
+  SEED_DEMO: "false"
+  WA_FONNTE_TOKEN: ${WA_FONNTE_TOKEN:-}
+  WA_WABLAS_TOKEN: ${WA_WABLAS_TOKEN:-}
+  WA_WABLAS_SECRET: ${WA_WABLAS_SECRET:-}
+  WA_WABLAS_URL: ${WA_WABLAS_URL:-https://console.wablas.com}
+  WORKER_OUTBOX_INTERVAL: ${WORKER_OUTBOX_INTERVAL:-30s}
+  WORKER_REMINDER_INTERVAL: ${WORKER_REMINDER_INTERVAL:-15m}
+  WORKER_PURGE_INTERVAL: ${WORKER_PURGE_INTERVAL:-1h}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD wajib diisi}
+      POSTGRES_DB: ${POSTGRES_DB:-fixphone}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      TZ: ${TZ:-Asia/Jakarta}
+      PGTZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    shm_size: 256mb
+    logging: *default-logging
+    networks:
+      - internal
+
+  # One-shot bootstrap: migrations, idempotent seed, RLS role login, doctor.
+  # API/worker wait for this service to finish successfully.
+  migrate:
+    image: fixphone-backend:${FIXPHONE_VERSION:-1.0.0}
+    build: *backend-build
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *backend-env
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        fixphone-cli migrate up
+        fixphone-cli seed
+        fixphone-cli set-app-role
+        fixphone-cli doctor
+    logging: *default-logging
+    networks:
+      - internal
+
+  api:
+    image: fixphone-backend:${FIXPHONE_VERSION:-1.0.0}
+    build: *backend-build
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment: *backend-env
+    volumes:
+      - uploads:/app/uploads
+      - backups:/app/backups
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/readyz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    logging: *default-logging
+    networks:
+      - internal
+
+  worker:
+    image: fixphone-backend:${FIXPHONE_VERSION:-1.0.0}
+    build: *backend-build
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    entrypoint: ["/usr/local/bin/fixphone-worker"]
+    environment: *backend-env
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pidof fixphone-worker >/dev/null || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+    networks:
+      - internal
+
+  web:
+    image: fixphone-frontend:${FIXPHONE_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: deploy/docker/frontend.Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+    networks:
+      - edge
+      - internal
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN wajib diisi}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2019/config/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+    networks:
+      - edge
+
+  # Scheduled pg_dump + uploads archive, optional age encryption and rclone
+  # offsite copy, plus a weekly restore drill. Always on.
+  backup:
+    image: fixphone-backup:${FIXPHONE_VERSION:-1.0.0}
+    build:
+      context: ./deploy/backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DB_ADMIN_DSN: ${DB_ADMIN_DSN:?DB_ADMIN_DSN wajib diisi}
+      BACKUP_DSN: ${DB_ADMIN_DSN:?DB_ADMIN_DSN wajib diisi}
+      BACKUP_DIR: /backups
+      BACKUP_STATUS_DIR: /backupstatus
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_REMOTE: ${BACKUP_REMOTE:-}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-15 2 * * *}
+      RESTORE_DRILL_SCHEDULE: ${RESTORE_DRILL_SCHEDULE:-15 3 * * 0}
+      RESTORE_DRILL_DSN: ${RESTORE_DRILL_DSN:-}
+      RESTORE_DRILL_MIN_TABLES: ${RESTORE_DRILL_MIN_TABLES:-25}
+      BACKUP_ON_START: "true"
+      UPLOAD_DIR: /data/uploads
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - backups:/backups
+      - backupstatus:/backupstatus
+      - uploads:/data/uploads:ro
+      - ./deploy/backup/config:/config:ro
+    logging: *default-logging
+    networks:
+      - internal
+
+  # ---- Monitoring profile: docker compose --profile monitoring ... ----------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed -e "s|__APP_DOMAIN__|$${APP_DOMAIN}|g" \
+            -e "s|__METRICS_TOKEN__|$${METRICS_TOKEN:-unused}|g" \
+            /etc/prometheus/prometheus.yml.tmpl > /tmp/prometheus.yml
+        exec /bin/prometheus --config.file=/tmp/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=30d \
+          --web.enable-lifecycle
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN wajib diisi}
+      METRICS_TOKEN: ${METRICS_TOKEN:-unused}
+    volumes:
+      - ./deploy/monitoring:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      api:
+        condition: service_started
+    logging: *default-logging
+    networks:
+      - internal
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed "s|__ALERT_WEBHOOK__|$${ALERT_WEBHOOK_URL}|g" /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml \
+          --storage.path=/alertmanager
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-http://127.0.0.1:9093/-/healthy}
+    volumes:
+      - ./deploy/monitoring:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    logging: *default-logging
+    networks:
+      - internal
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/var/lib/node_exporter/textfile
+    volumes:
+      - /:/host:ro,rslave
+      - backupstatus:/var/lib/node_exporter/textfile:ro
+    ports:
+      - "127.0.0.1:9100:9100"
+    logging: *default-logging
+    networks:
+      - internal
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9115:9115"
+    logging: *default-logging
+    networks:
+      - internal
+
+networks:
+  edge:
+    name: fixphone-edge
+  internal:
+    name: fixphone-internal
+
+volumes:
+  pgdata:
+    name: fixphone-pgdata
+  uploads:
+    name: fixphone-uploads
+  backups:
+    name: fixphone-backups
+  backupstatus:
+    name: fixphone-backup-status
+  caddy_data:
+    name: fixphone-caddy-data
+  caddy_config:
+    name: fixphone-caddy-config
+  prometheus_data:
+    name: fixphone-prometheus-data
+  alertmanager_data:
+    name: fixphone-alertmanager-data

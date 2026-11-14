@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -58,7 +59,7 @@ func (s *Service) CreateCategory(ctx context.Context, actor Actor, input CreateC
 	now := time.Now().UTC()
 	id := uuid.New()
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var duplicate bool
 		if err := tx.WithContext(ctx).Raw(`
 			SELECT EXISTS (SELECT 1 FROM sparepart_categories
@@ -104,7 +105,7 @@ func (s *Service) UpdateCategory(ctx context.Context, actor Actor, id uuid.UUID,
 	}
 	now := time.Now().UTC()
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var before struct {
 			ID   uuid.UUID `gorm:"column:id"`
 			Name string    `gorm:"column:name"`
@@ -208,7 +209,7 @@ func (s *Service) CreateSupplier(ctx context.Context, actor Actor, input CreateS
 	now := time.Now().UTC()
 	id := uuid.New()
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			INSERT INTO suppliers (id, tenant_id, name, contact_name, phone, address, notes, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -241,7 +242,7 @@ func (s *Service) UpdateSupplier(ctx context.Context, actor Actor, id uuid.UUID,
 	now := time.Now().UTC()
 
 	var out Supplier
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var before struct {
 			ID          uuid.UUID `gorm:"column:id"`
 			Name        string    `gorm:"column:name"`

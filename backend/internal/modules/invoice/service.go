@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -505,7 +506,7 @@ func (s *Service) UpdateInvoice(ctx context.Context, actor Actor, id uuid.UUID, 
 	}
 
 	var current invoiceRow
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Raw(`
 			SELECT i.id, i.tenant_id, i.outlet_id, i.service_order_id, i.invoice_no,
 			       i.status, i.subtotal_service, i.subtotal_part, i.discount_type,
@@ -601,7 +602,7 @@ func (s *Service) IssueInvoice(ctx context.Context, actor Actor, id uuid.UUID) (
 		return nil, err
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var current invoiceRow
 		if err := tx.Raw(`
 			SELECT i.id, i.tenant_id, i.outlet_id, i.service_order_id, i.invoice_no,
@@ -721,7 +722,7 @@ func (s *Service) VoidInvoice(ctx context.Context, actor Actor, id uuid.UUID, re
 		return nil, apperror.Validation(map[string]string{"reason": "Alasan pembatalan invoice wajib diisi."})
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var current invoiceRow
 		if err := tx.Raw(`
 			SELECT i.id, i.tenant_id, i.outlet_id, i.invoice_no, i.status,

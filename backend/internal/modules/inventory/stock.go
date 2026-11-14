@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -281,7 +282,7 @@ func (s *Service) Purchase(ctx context.Context, actor Actor, input PurchaseReque
 	canViewCost := actor.HasPermission("inventory.cost.view")
 	result := &PurchaseResult{ReferenceID: referenceID.String(), PurchasedAt: *purchasedAt, Items: []Movement{}}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		outletName, err := s.outletName(ctx, tx, tenantID, outletID)
 		if err != nil {
 			return err
@@ -420,7 +421,7 @@ func (s *Service) AdjustStock(ctx context.Context, actor Actor, input Adjustment
 	now := time.Now().UTC()
 
 	var dto Movement
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		outletName, err := s.outletName(ctx, tx, tenantID, outletID)
 		if err != nil {
 			return err

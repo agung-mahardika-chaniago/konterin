@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -49,7 +50,7 @@ func (s *Service) UpsertDiagnostic(ctx context.Context, actor Actor, orderID uui
 	now := time.Now().UTC()
 	var diagID uuid.UUID
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var existingID uuid.UUID
 		queryErr := tx.Raw(`SELECT id FROM service_diagnostics WHERE service_order_id = ? AND tenant_id = ?`,
 			orderID, tenantID).Scan(&existingID).Error

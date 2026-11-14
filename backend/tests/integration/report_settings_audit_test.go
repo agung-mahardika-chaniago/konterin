@@ -16,15 +16,15 @@ type revenueReportData struct {
 	From   string `json:"from"`
 	To     string `json:"to"`
 	Items  []struct {
-		Label         string `json:"label"`
-		InvoiceCount  int64  `json:"invoice_count"`
-		ServiceCount  int64  `json:"service_count"`
-		ServiceAmount int64  `json:"service_amount"`
-		PartAmount    int64  `json:"part_amount"`
-		DiscountAmount int64 `json:"discount_amount"`
-		TotalRevenue  int64  `json:"total_revenue"`
-		PaidAmount    int64  `json:"paid_amount"`
-		UnpaidAmount  int64  `json:"unpaid_amount"`
+		Label          string `json:"label"`
+		InvoiceCount   int64  `json:"invoice_count"`
+		ServiceCount   int64  `json:"service_count"`
+		ServiceAmount  int64  `json:"service_amount"`
+		PartAmount     int64  `json:"part_amount"`
+		DiscountAmount int64  `json:"discount_amount"`
+		TotalRevenue   int64  `json:"total_revenue"`
+		PaidAmount     int64  `json:"paid_amount"`
+		UnpaidAmount   int64  `json:"unpaid_amount"`
 	} `json:"items"`
 	Total struct {
 		InvoiceCount   int64 `json:"invoice_count"`
@@ -39,11 +39,11 @@ type revenueReportData struct {
 }
 
 type servicesReportData struct {
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Total   int64  `json:"total"`
-	Completed int64 `json:"completed"`
-	InProgress int64 `json:"in_progress"`
+	From            string `json:"from"`
+	To              string `json:"to"`
+	Total           int64  `json:"total"`
+	Completed       int64  `json:"completed"`
+	InProgress      int64  `json:"in_progress"`
 	StatusBreakdown []struct {
 		Status string `json:"status"`
 		Count  int64  `json:"count"`
@@ -110,29 +110,29 @@ type stockReportData struct {
 		StockValue int64  `json:"stock_value"`
 		IsLow      bool   `json:"is_low"`
 	} `json:"items"`
-	TotalValue    int64 `json:"total_value"`
-	TotalItems    int64 `json:"total_items"`
-	LowStockRows  int64 `json:"low_stock_rows"`
+	TotalValue   int64 `json:"total_value"`
+	TotalItems   int64 `json:"total_items"`
+	LowStockRows int64 `json:"low_stock_rows"`
 }
 
 type settingsData struct {
-	StoreName                  string `json:"store_name"`
-	Timezone                   string `json:"timezone"`
-	TicketPrefix               string `json:"ticket_prefix"`
+	StoreName                  string  `json:"store_name"`
+	Timezone                   string  `json:"timezone"`
+	TicketPrefix               string  `json:"ticket_prefix"`
 	InvoiceFooter              *string `json:"invoice_footer"`
-	ReceiptPaperWidth          int    `json:"receipt_paper_width"`
-	DefaultServiceWarrantyDays int    `json:"default_service_warranty_days"`
-	WAProvider                 string `json:"wa_provider"`
-	UpdatedAt                  string `json:"updated_at"`
+	ReceiptPaperWidth          int     `json:"receipt_paper_width"`
+	DefaultServiceWarrantyDays int     `json:"default_service_warranty_days"`
+	WAProvider                 string  `json:"wa_provider"`
+	UpdatedAt                  string  `json:"updated_at"`
 }
 
 type backupData struct {
-	ID         string `json:"id"`
-	FileName   string `json:"file_name"`
-	SizeBytes  int64  `json:"size_bytes"`
-	Status     string `json:"status"`
-	TableCount int    `json:"table_count"`
-	RowCount    int64  `json:"row_count"`
+	ID         string  `json:"id"`
+	FileName   string  `json:"file_name"`
+	SizeBytes  int64   `json:"size_bytes"`
+	Status     string  `json:"status"`
+	TableCount int     `json:"table_count"`
+	RowCount   int64   `json:"row_count"`
 	CreatedBy  *string `json:"created_by"`
 }
 
@@ -151,10 +151,10 @@ type auditListData struct {
 // stage10Fixture seeds one complete repair + payment + expense flow so every
 // Stage 10 report has non-trivial numbers to aggregate.
 type stage10Fixture struct {
-	orderID    string
-	invoiceID  string
+	orderID     string
+	invoiceID   string
 	sparepartID string
-	techID     string
+	techID      string
 }
 
 // requestBinary performs a request whose response body is not JSON (xlsx,
@@ -417,11 +417,11 @@ func TestStage10SettingsAuditAndManualBackup(t *testing.T) {
 	}
 
 	patched := app.request(t, http.MethodPatch, "/api/v1/settings", map[string]any{
-		"store_name":                   "Toko Demo Utama",
-		"invoice_footer":               "Terima kasih atas kepercayaan Anda",
-		"receipt_paper_width":          80,
+		"store_name":                    "Toko Demo Utama",
+		"invoice_footer":                "Terima kasih atas kepercayaan Anda",
+		"receipt_paper_width":           80,
 		"default_service_warranty_days": 14,
-		"wa_provider":                  "noop",
+		"wa_provider":                   "noop",
 	}, ownerToken)
 	mustStatus(t, patched, http.StatusOK, "patch settings")
 	patchedData := decodeData[settingsData](t, patched)

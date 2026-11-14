@@ -146,16 +146,16 @@ type ServiceDeps struct {
 
 // statusLabels keeps public-facing Indonesian labels in one place.
 var statusLabels = map[string]string{
-	"received":           "Diterima",
-	"waiting_diagnosis":  "Menunggu Diagnosis",
-	"waiting_approval":   "Menunggu Persetujuan",
-	"waiting_part":       "Menunggu Sparepart",
-	"in_progress":        "Sedang Diperbaiki",
-	"testing":            "Sedang Diuji",
-	"completed":          "Selesai Dikerjakan",
-	"ready_for_pickup":   "Siap Diambil",
-	"picked_up":          "Sudah Diambil",
-	"cancelled":          "Dibatalkan",
+	"received":          "Diterima",
+	"waiting_diagnosis": "Menunggu Diagnosis",
+	"waiting_approval":  "Menunggu Persetujuan",
+	"waiting_part":      "Menunggu Sparepart",
+	"in_progress":       "Sedang Diperbaiki",
+	"testing":           "Sedang Diuji",
+	"completed":         "Selesai Dikerjakan",
+	"ready_for_pickup":  "Siap Diambil",
+	"picked_up":         "Sudah Diambil",
+	"cancelled":         "Dibatalkan",
 }
 
 // StatusLabel returns the Indonesian label for a service status.

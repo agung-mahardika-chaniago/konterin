@@ -15,11 +15,11 @@ import (
 )
 
 type publicTrackingData struct {
-	TicketNo    string `json:"ticket_no"`
-	Status      string `json:"status"`
-	StatusLabel string `json:"status_label"`
-	Device      string `json:"device"`
-	Complaint   string `json:"complaint"`
+	TicketNo    string  `json:"ticket_no"`
+	Status      string  `json:"status"`
+	StatusLabel string  `json:"status_label"`
+	Device      string  `json:"device"`
+	Complaint   string  `json:"complaint"`
 	Diagnosis   *string `json:"diagnosis"`
 	Store       struct {
 		Name string `json:"name"`
@@ -65,12 +65,12 @@ type warrantyData struct {
 }
 
 type claimData struct {
-	ID         string `json:"id"`
-	ClaimNo    string `json:"claim_no"`
-	WarrantyID string `json:"warranty_id"`
-	Status     string `json:"status"`
-	Complaint  string `json:"complaint"`
-	Resolution *string `json:"resolution"`
+	ID                 string  `json:"id"`
+	ClaimNo            string  `json:"claim_no"`
+	WarrantyID         string  `json:"warranty_id"`
+	Status             string  `json:"status"`
+	Complaint          string  `json:"complaint"`
+	Resolution         *string `json:"resolution"`
 	ReworkServiceOrder *struct {
 		ID       string `json:"id"`
 		TicketNo string `json:"ticket_no"`
@@ -79,11 +79,11 @@ type claimData struct {
 }
 
 type notificationData struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Title   string `json:"title"`
-	IsRead  bool   `json:"is_read"`
-	IsBroadcast bool `json:"is_broadcast"`
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Title       string `json:"title"`
+	IsRead      bool   `json:"is_read"`
+	IsBroadcast bool   `json:"is_broadcast"`
 }
 
 type outboxData struct {
@@ -320,8 +320,8 @@ func TestWarrantyClaimReworkAndNotifications(t *testing.T) {
 		t.Fatalf("rework detail = %+v", detail)
 	}
 	var reworkLink struct {
-		OrderType    string     `gorm:"column:order_type"`
-		ReworkOf     *uuid.UUID `gorm:"column:rework_of_service_order_id"`
+		OrderType     string     `gorm:"column:order_type"`
+		ReworkOf      *uuid.UUID `gorm:"column:rework_of_service_order_id"`
 		WarrantyClaim *uuid.UUID `gorm:"column:warranty_claim_id"`
 	}
 	if err := app.db.Raw(`
@@ -357,9 +357,9 @@ func TestWorkerRemindersOutboxAndCredentialPurge(t *testing.T) {
 	ownerToken, _ := app.loginOwner(t)
 
 	created := createServiceOrder(t, app, ownerToken, map[string]any{
-		"customer":  map[string]any{"phone": "081277778888", "name": "Budi Worker"},
-		"device":    map[string]any{"brand": "Asus", "model": "Zenfone 10"},
-		"complaint": "Cek konektor charger",
+		"customer":   map[string]any{"phone": "081277778888", "name": "Budi Worker"},
+		"device":     map[string]any{"brand": "Asus", "model": "Zenfone 10"},
+		"complaint":  "Cek konektor charger",
 		"credential": map[string]any{"type": "pin", "value": "4321"},
 	})
 	orderID := created["id"].(string)
@@ -433,8 +433,8 @@ func TestWorkerRemindersOutboxAndCredentialPurge(t *testing.T) {
 		t.Fatalf("purge credentials: count=%d err=%v", purged, err)
 	}
 	var credential struct {
-		Type string  `gorm:"column:credential_type"`
-		Enc  *[]byte `gorm:"column:credential_enc"`
+		Type string     `gorm:"column:credential_type"`
+		Enc  *[]byte    `gorm:"column:credential_enc"`
 		Set  *time.Time `gorm:"column:credential_set_at"`
 	}
 	if err := app.db.Raw(`

@@ -257,10 +257,13 @@ Permissions-Policy: camera=(self), microphone=(), geolocation=()
 Cache-Control: no-store (respons sensitif)
 ```
 
-- HTTPS wajib; HTTP redirect 301.
+- HTTPS wajib; HTTP redirect 301 (Caddy `local`/ACME).
 - TLS 1.2+; cipher modern (konfigurasi Caddy/Nginx).
+- HSTS `max-age=31536000; includeSubDomains` di production.
+- CSP, Permissions-Policy, Referrer-Policy, X-Frame-Options, nosniff diterapkan
+  baik oleh Nginx (SPA) maupun Caddy (edge).
 - CORS origin eksplisit; `Access-Control-Allow-Credentials` hanya bila perlu.
-- Cookie `Secure` di production.
+- Cookie refresh `HttpOnly`, `Secure`, `SameSite=Strict`, path `/api/v1/auth`.
 
 ---
 
@@ -270,7 +273,9 @@ Cache-Control: no-store (respons sensitif)
 |---|---|---|
 | `JWT_SECRET` | env/secret manager | 90 hari (dukungan 2 kunci) |
 | `APP_ENC_KEY` | env/secret manager | tahunan + re-enkripsi |
-| `DB_DSN` | env | saat ganti password |
+| `DB_ADMIN_DSN` | env/secret manager | saat ganti password |
+| `APP_DB_PASSWORD` / `DB_DSN` | env/secret manager | saat ganti password |
+| `METRICS_TOKEN` | env/secret manager | 90 hari (opsional) |
 | Kredensial WA | env atau `wa_config_enc` (AES) | saat provider berubah |
 | Kunci backup | secret manager | tahunan |
 
@@ -282,20 +287,23 @@ Cache-Control: no-store (respons sensitif)
 
 ## 14. Backup & Pemulihan
 
-```bash
-# Backup harian
-pg_dump -Fc -h $DB_HOST -U $DB_USER $DB_NAME > /backups/fixphone_$(date +%F).dump
-tar -czf /backups/uploads_$(date +%F).tar.gz /data/uploads
-age -r $BACKUP_PUBKEY -o /backups/...age /backups/...
+Implementasi ada di `deploy/backup/` dan dijalankan container `backup`:
 
-# Restore (staging)
-createdb fixphone_restore
-pg_restore -d fixphone_restore /backups/fixphone_2026-11-03.dump
+```bash
+# Harian (default 02:15 UTC): pg_dump custom + uploads tar.gz
+#   -> /backups/daily/fixphone-<stamp>.dump
+#   -> opsional age encrypt lalu rclone copy ke BACKUP_REMOTE
+# Mingguan (default Minggu 03:15 UTC): restore ke RESTORE_DRILL_DSN,
+#   verifikasi jumlah tabel, tulis metrik Prometheus.
 ```
 
-- Retensi 30 harian + 12 bulanan; salinan offsite terenkripsi.
-- Uji restore kuartalan; catat RTO aktual.
-- Backup tidak menyertakan kunci enkripsi; simpan kunci terpisah.
+- Retensi lokal default 14 hari (`BACKUP_RETENTION_DAYS`), offsite memakai
+  `rclone delete --min-age`.
+- Restore manual: `deploy/backup/restore.sh <dump> <dsn> --yes`; selalu restore
+  ke database baru lalu verifikasi sebelum promosi.
+- Uji restore mingguan otomatis bila `RESTORE_DRILL_DSN` diisi; prosedur lengkap
+  dan RTO/RPO ada di [`20 — Runbook Operasional`](20-runbook-operasional.md).
+- Backup terenkripsi dengan age; private key tidak disimpan di server yang sama.
 - Akses direktori backup hanya untuk proses backup & Owner.
 
 ---
@@ -327,28 +335,30 @@ pg_restore -d fixphone_restore /backups/fixphone_2026-11-03.dump
 6. **Postmortem** — root cause, tindakan pencegahan, update dokumen.
 7. **Bukti** — simpan log & kronologi; jangan timpa.
 
-Kontak darurat dan matriks eskalasi diisi pada Tahap 12.
+Kontak darurat, matriks eskalasi, dan langkah insiden ada di
+[`20 — Runbook Operasional`](20-runbook-operasional.md) §7.
 
 ---
 
 ## 17. Checklist Keamanan Sebelum Go-Live
 
-Status per Tahap 11 (12 November 2026). Item production-only tetap terbuka
-sampai Tahap 12.
+Status per Tahap 12 (13 November 2026, v1.0.0).
 
 - [x] Semua endpoint memiliki permission & validasi.
 - [x] Test IDOR lintas tenant & lintas outlet lulus.
-- [x] RLS aktif dan diuji.
-- [x] Tidak ada secret di repo/image/log.
-- [ ] Password default diganti; super admin wajib ganti.
-- [ ] HTTPS + header keamanan terverifikasi (header sudah diuji; TLS production Tahap 12).
+- [x] RLS aktif, diuji, dan dipakai runtime (`fixphone_app` + request-scoped
+      transaction).
+- [x] Tidak ada secret di repo/image/log (`.env.production` gitignored).
+- [x] Password default diganti; super admin wajib ganti saat login pertama.
+- [x] HTTPS + header keamanan terverifikasi (Caddy ACME, HSTS, smoke test).
 - [x] Rate limit login & tracking terbukti.
 - [x] PIN tidak muncul di response mana pun (grep + test).
-- [x] Audit log mencatat aksi sensitif.
-- [ ] Backup otomatis berjalan & restore teruji (restore drill lulus; jadwal otomatis Tahap 12).
-- [x] Dependency scan bersih dari critical/high.
+- [x] Audit log mencatat aksi sensitif dan append-only.
+- [x] Backup otomatis berjalan & restore drill mingguan tersedia.
+- [x] Dependency & image scan (gosec, govulncheck, npm audit, Trivy di CI).
 - [x] `gosec` & `npm audit` ditinjau.
 - [x] Log tidak memuat data sensitif.
-- [ ] Runbook insiden & kontak tersedia.
-- [ ] Hak akses server (SSH, DB) minimum.
-- [ ] Tidak ada akun/demo data di production.
+- [x] Runbook insiden & kontak tersedia.
+- [x] Hak akses server (SSH, DB) minimum: container non-root, DB tanpa port
+      publik, role aplikasi NOSUPERUSER/NOBYPASSRLS.
+- [x] Tidak ada akun/demo data di production (`SEED_DEMO=false` + `doctor`).

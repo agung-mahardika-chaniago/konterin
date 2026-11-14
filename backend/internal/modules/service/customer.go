@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -177,7 +178,7 @@ func (s *Service) UpdateCustomer(ctx context.Context, actor Actor, id uuid.UUID,
 		notes = trimOptional(input.Notes)
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		query := `UPDATE customers SET name = ?, phone = ?, address = ?, notes = ?, updated_by = ?, updated_at = now()`
 		args := []any{name, phone, address, notes, actorID(actor)}
 		if normalized != "" {

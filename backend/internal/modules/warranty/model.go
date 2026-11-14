@@ -95,33 +95,33 @@ type Warranty struct {
 
 // Claim is the API representation of a warranty claim.
 type Claim struct {
-	ID               string      `json:"id"`
-	ClaimNo          string      `json:"claim_no"`
-	WarrantyID       string      `json:"warranty_id"`
-	WarrantyNo       string      `json:"warranty_no"`
-	Status           string      `json:"status"`
-	Complaint        string      `json:"complaint"`
-	Resolution       *string     `json:"resolution"`
-	Customer         CustomerRef `json:"customer"`
-	Device           DeviceRef   `json:"device"`
-	ServiceOrder     ServiceRef  `json:"service_order"`
-	Outlet           OutletRef   `json:"outlet"`
-	HandledBy        *string     `json:"handled_by"`
+	ID                 string      `json:"id"`
+	ClaimNo            string      `json:"claim_no"`
+	WarrantyID         string      `json:"warranty_id"`
+	WarrantyNo         string      `json:"warranty_no"`
+	Status             string      `json:"status"`
+	Complaint          string      `json:"complaint"`
+	Resolution         *string     `json:"resolution"`
+	Customer           CustomerRef `json:"customer"`
+	Device             DeviceRef   `json:"device"`
+	ServiceOrder       ServiceRef  `json:"service_order"`
+	Outlet             OutletRef   `json:"outlet"`
+	HandledBy          *string     `json:"handled_by"`
 	ReworkServiceOrder *ServiceRef `json:"rework_service_order,omitempty"`
-	ClaimedAt        time.Time   `json:"claimed_at"`
-	ResolvedAt       *time.Time  `json:"resolved_at"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+	ClaimedAt          time.Time   `json:"claimed_at"`
+	ResolvedAt         *time.Time  `json:"resolved_at"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
 }
 
 // WarrantyFilter narrows the warranty list.
 type WarrantyFilter struct {
-	Status        string
-	Query         string
-	OutletID      *uuid.UUID
+	Status         string
+	Query          string
+	OutletID       *uuid.UUID
 	ExpiringInDays int
-	Page          int
-	PerPage       int
+	Page           int
+	PerPage        int
 }
 
 // ClaimFilter narrows the claim list.
@@ -146,11 +146,11 @@ type UpdateClaimRequest struct {
 
 // ReworkResult is returned after a rework order is created.
 type ReworkResult struct {
-	ServiceOrderID string `json:"service_order_id"`
-	TicketNo       string `json:"ticket_no"`
-	Status         string `json:"status"`
-	ClaimID        string `json:"claim_id"`
-	ClaimStatus    string `json:"claim_status"`
-	InvoiceNo      string `json:"invoice_no"`
+	ServiceOrderID string    `json:"service_order_id"`
+	TicketNo       string    `json:"ticket_no"`
+	Status         string    `json:"status"`
+	ClaimID        string    `json:"claim_id"`
+	ClaimStatus    string    `json:"claim_status"`
+	InvoiceNo      string    `json:"invoice_no"`
 	CreatedAt      time.Time `json:"created_at"`
 }

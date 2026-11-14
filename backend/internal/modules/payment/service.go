@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 	"fixphone/backend/internal/pkg/docnum"
@@ -307,13 +308,16 @@ func (s *Service) ensureInvoiceAccess(ctx context.Context, actor Actor, invoiceI
 	if err != nil {
 		return err
 	}
-	var outletID uuid.UUID
-	if err := s.db.WithContext(ctx).Raw(`
-		SELECT outlet_id FROM invoices WHERE id = ? AND tenant_id = ?`,
-		invoiceID, tenantID).Scan(&outletID).Error; err != nil {
-		return apperror.Internal(err)
+	var row struct {
+		OutletID uuid.UUID `gorm:"column:outlet_id"`
 	}
-	if outletID == uuid.Nil || !actor.HasOutlet(outletID) {
+	result := s.db.WithContext(ctx).Raw(`
+		SELECT outlet_id FROM invoices WHERE id = ? AND tenant_id = ?`,
+		invoiceID, tenantID).Scan(&row)
+	if result.Error != nil {
+		return apperror.Internal(result.Error)
+	}
+	if result.RowsAffected == 0 || row.OutletID == uuid.Nil || !actor.HasOutlet(row.OutletID) {
 		return apperror.NotFound("Invoice tidak ditemukan.")
 	}
 	return nil
@@ -420,7 +424,7 @@ func (s *Service) CreatePayment(ctx context.Context, actor Actor, invoiceID uuid
 	}
 
 	var result *CreatePaymentResult
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if idempotencyKey != "" {
 			var existing paymentRow
 			if err := tx.Raw(`
@@ -569,7 +573,7 @@ func (s *Service) VoidPayment(ctx context.Context, actor Actor, paymentID uuid.U
 	}
 
 	var result *VoidPaymentResult
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		var current paymentRow
 		if err := tx.Raw(`
 			SELECT p.id, p.tenant_id, p.outlet_id, p.invoice_id, p.payment_no,

@@ -4,7 +4,7 @@ import "runtime"
 
 var (
 	// Version is set with -ldflags "-X fixphone/backend/internal/pkg/version.Version=..." at build time.
-	Version   = "0.11.0"
+	Version   = "1.0.0"
 	Commit    = "dev"
 	BuildDate = "unknown"
 )

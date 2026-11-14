@@ -1,0 +1,14 @@
+# FixPhone Alertmanager receiver. Compose substitutes __ALERT_WEBHOOK__ with
+# ALERT_WEBHOOK_URL (Slack/Teams/Telegram relay or the existing ops webhook).
+route:
+  receiver: default
+  group_by: [alertname, job]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    webhook_configs:
+      - url: "__ALERT_WEBHOOK__"
+        send_resolved: true

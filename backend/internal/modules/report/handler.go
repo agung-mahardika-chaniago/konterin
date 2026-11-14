@@ -23,10 +23,10 @@ func NewHandler(service *Service) *Handler { return &Handler{service: service} }
 
 // actorInfo carries the tenant scoping plus display name of the caller.
 type actorInfo struct {
-	TenantID   uuid.UUID
-	OutletID   *uuid.UUID
-	OutletIDs  []uuid.UUID
-	ActorName  string
+	TenantID  uuid.UUID
+	OutletID  *uuid.UUID
+	OutletIDs []uuid.UUID
+	ActorName string
 }
 
 // actorFrom builds the actor scope; reports are tenant-only endpoints.
@@ -42,7 +42,7 @@ func actorFrom(c *gin.Context) (actorInfo, error) {
 	}
 	return actorInfo{
 		TenantID:  scope.TenantID,
-		OutletID: scope.ActiveOutletID,
+		OutletID:  scope.ActiveOutletID,
 		ActorName: name,
 	}, nil
 }

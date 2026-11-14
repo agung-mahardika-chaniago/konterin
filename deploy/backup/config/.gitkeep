@@ -1,0 +1,2 @@
+# Tempatkan rclone.conf dan age-identity.txt di folder ini.
+# File asli tidak boleh di-commit (lihat .gitignore).

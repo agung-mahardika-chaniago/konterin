@@ -23,15 +23,15 @@ func NewService(db *gorm.DB) *Service { return &Service{db: db} }
 
 // Filter is the audit log query filter set.
 type Filter struct {
-	TenantID  uuid.UUID
-	UserID    *uuid.UUID
-	Module    string
-	Action    string
+	TenantID   uuid.UUID
+	UserID     *uuid.UUID
+	Module     string
+	Action     string
 	EntityType string
-	From      *time.Time
-	To        *time.Time
-	Page      int
-	PerPage   int
+	From       *time.Time
+	To         *time.Time
+	Page       int
+	PerPage    int
 }
 
 // Row is one audit entry as returned to the client.
@@ -106,5 +106,3 @@ func (s *Service) Modules(ctx context.Context, tenantID uuid.UUID) ([]string, er
 	}
 	return modules, nil
 }
-
-

@@ -18,7 +18,8 @@ func isolateEnv(t *testing.T) {
 		"APP_ENV", "APP_PORT", "APP_BASE_URL", "DB_DSN", "JWT_SECRET",
 		"APP_ENC_KEY", "CORS_ORIGINS", "UPLOAD_DIR", "UPLOAD_MAX_MB",
 		"DB_MAX_OPEN_CONNS", "DB_MAX_IDLE_CONNS", "DB_CONN_MAX_LIFETIME",
-		"DB_CONN_MAX_IDLE_TIME", "SEED_DEMO",
+		"DB_CONN_MAX_IDLE_TIME", "SEED_DEMO", "DB_ADMIN_DSN", "BACKUP_DSN",
+		"TRUSTED_PROXIES", "METRICS_TOKEN",
 	} {
 		t.Setenv(key, "")
 	}
@@ -131,6 +132,40 @@ func TestLoadRejectsBadPoolLimits(t *testing.T) {
 	t.Setenv("DB_MAX_IDLE_CONNS", "5")
 	if _, err := config.Load(); err == nil {
 		t.Fatal("expected pool limit validation error")
+	}
+}
+
+func TestLoadProductionRequiresAdminDSN(t *testing.T) {
+	isolateEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_BASE_URL", "https://fixphone.example.com")
+	t.Setenv("CORS_ORIGINS", "https://fixphone.example.com")
+	t.Setenv("DB_DSN", validDSN)
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("APP_ENC_KEY", encKey())
+
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "DB_ADMIN_DSN") {
+		t.Fatalf("expected DB_ADMIN_DSN error, got %v", err)
+	}
+}
+
+func TestLoadProductionBackupFallsBackToAdminDSN(t *testing.T) {
+	isolateEnv(t)
+	const adminDSN = "postgres://postgres:secret@127.0.0.1:55432/fixphone?sslmode=disable"
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("APP_BASE_URL", "https://fixphone.example.com")
+	t.Setenv("CORS_ORIGINS", "https://fixphone.example.com")
+	t.Setenv("DB_DSN", "postgres://fixphone_app:secret@127.0.0.1:55432/fixphone?sslmode=disable")
+	t.Setenv("DB_ADMIN_DSN", adminDSN)
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("APP_ENC_KEY", encKey())
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.BackupDSN != adminDSN {
+		t.Fatalf("BackupDSN = %q, want admin DSN fallback", cfg.BackupDSN)
 	}
 }
 

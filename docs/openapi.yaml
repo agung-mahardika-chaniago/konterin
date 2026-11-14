@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FixPhone API
-  version: 0.10.0
+  version: 1.0.0
   description: |
     Kontrak API FixPhone untuk Tahap 10: autentikasi, sesi, RBAC, pengguna,
     role, outlet, dashboard, pelanggan, intake servis HP, diagnosis, state

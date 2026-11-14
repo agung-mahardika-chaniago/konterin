@@ -27,6 +27,7 @@ import (
 	"fixphone/backend/internal/modules/user"
 	"fixphone/backend/internal/modules/warranty"
 	"fixphone/backend/internal/pkg/jwtutil"
+	"fixphone/backend/internal/pkg/metrics"
 	"fixphone/backend/internal/pkg/version"
 
 	"github.com/gin-gonic/gin"
@@ -36,9 +37,25 @@ import (
 
 const requestIDKey = "request_id"
 
-// New builds the HTTP engine, global middleware, health checks, and Stage 3
-// auth/RBAC routes.
+// New builds the HTTP engine with a single database handle. It is used by
+// development and tests where the same role owns the schema and serves
+// requests.
 func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
+	return NewWithDatabases(cfg, db, db, log)
+}
+
+// NewWithDatabases builds the HTTP engine. appDB serves tenant-scoped traffic
+// and must be the RLS-enforcing role in production; adminDB serves bootstrap
+// lookups (login, token refresh, tenant resolution, public tracking) that run
+// before a tenant context exists. Both handles are the same in development.
+func NewWithDatabases(cfg *config.Config, appDB, adminDB *gorm.DB, log *slog.Logger) *gin.Engine {
+	if err := database.EnableTenantBinding(appDB); err != nil {
+		panic("router: tenant binding: " + err.Error())
+	}
+	return buildEngine(cfg, appDB, adminDB, log)
+}
+
+func buildEngine(cfg *config.Config, db, adminDB *gorm.DB, log *slog.Logger) *gin.Engine {
 	switch cfg.AppEnv {
 	case "production":
 		gin.SetMode(gin.ReleaseMode)
@@ -49,6 +66,12 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 	}
 
 	r := gin.New()
+	if len(cfg.TrustedProxies) == 0 {
+		_ = r.SetTrustedProxies(nil)
+	} else if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Warn("trusted_proxies_invalid", "error", err)
+		_ = r.SetTrustedProxies(nil)
+	}
 	r.Use(requestIDMiddleware())
 	r.Use(accessLogMiddleware(log))
 	r.Use(recoveryMiddleware(log))
@@ -56,12 +79,16 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 	r.Use(corsMiddleware(cfg.CORSOrigins))
 	r.Use(middleware.CheckOrigin(cfg.CORSOrigins))
 	r.Use(bodyLimitMiddleware(1 << 20)) // 1 MB JSON
+	r.Use(metrics.Middleware())
 
 	r.GET("/healthz", healthz)
 	r.GET("/readyz", readyz(db, log))
 	r.GET("/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, version.Info())
 	})
+	r.GET("/metrics", metrics.MetricsAuth(cfg.MetricsToken), metrics.Handler(func(ctx context.Context) error {
+		return database.Ping(ctx, db)
+	}))
 
 	accessTTL := cfg.AccessTokenTTL
 	if accessTTL <= 0 {
@@ -95,9 +122,12 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 		panic("router: " + err.Error())
 	}
 
+	// Authentication runs before a tenant context exists and therefore uses the
+	// privileged resolver pool. Management of users stays on the RLS-bound pool.
+	authRepo := user.NewRepository(adminDB)
 	userRepo := user.NewRepository(db)
 	userService := user.NewService(db, userRepo)
-	authService := auth.NewService(db, userRepo, tokenManager, auth.ServiceConfig{
+	authService := auth.NewService(adminDB, authRepo, tokenManager, auth.ServiceConfig{
 		MaxLoginAttempts: maxAttempts,
 		LockDuration:     lockDuration,
 		RefreshTTL:       refreshTTL,
@@ -130,13 +160,13 @@ func New(cfg *config.Config, db *gorm.DB, log *slog.Logger) *gin.Engine {
 			ActorID: event.ActorID, PickedUpAt: event.PickedUpAt,
 		})
 	})
-	trackingModule := tracking.NewService(db)
+	trackingModule := tracking.NewService(adminDB)
 	reportModule := report.NewService(db)
 	settingsModule := settings.NewService(db, cfg.BackupDir, cfg.BackupDSN)
 	auditViewer := auditviewmod.NewService(db)
 
 	authMiddleware := middleware.Auth(tokenManager, authService)
-	tenantMiddleware := middleware.Tenant(db)
+	tenantMiddleware := middleware.Tenant(adminDB, db, log)
 	can := middleware.RequirePermission
 	loginLimiter := middleware.RateLimit(rateLimit, rateWindow)
 	publicLimiter := middleware.RateLimit(10, time.Minute)

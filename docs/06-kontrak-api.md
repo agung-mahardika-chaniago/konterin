@@ -1,6 +1,6 @@
 # 06 — Kontrak API
 
-**Versi:** 1.0 (Tahap 1) · **Base URL:** `/api/v1`
+**Versi:** 1.0.0 · **Base URL:** `/api/v1`
 **Format:** JSON UTF-8 · **Autentikasi:** `Authorization: Bearer <access_token>`
 
 Dokumen ini adalah kontrak acuan. Spesifikasi OpenAPI 3.1 lengkap
@@ -921,6 +921,14 @@ dan dibatasi waktu.
 | GET | `/healthz` | publik (tanpa detail DB) |
 | GET | `/readyz` | publik/internal (DB ping, versi migrasi) |
 | GET | `/version` | publik (versi build, commit) |
+| GET | `/metrics` | internal; Bearer `METRICS_TOKEN` bila diisi |
+
+- Endpoint health/version juga tersedia di bawah `/api/v1` untuk proxy yang
+  hanya meneruskan prefix tersebut.
+- `/metrics` hanya diekspos pada jaringan internal Compose; Nginx mengembalikan
+  404 untuk path ini dan Prometheus men-scrape `api:8080` langsung.
+- Response API produksi menyertakan HSTS, CSP, `nosniff`, `X-Frame-Options`,
+  `Referrer-Policy`, dan `Permissions-Policy` (lihat docs/07 §12).
 
 ---
 

@@ -24,10 +24,15 @@ type Config struct {
 	LogLevel   slog.Level
 
 	DBDSN             string
+	DBAdminDSN        string
+	AutoMigrate       bool
 	DBMaxOpenConns    int
 	DBMaxIdleConns    int
 	DBConnMaxLifetime time.Duration
 	DBConnMaxIdleTime time.Duration
+
+	MetricsToken   string
+	TrustedProxies []string
 
 	JWTSecret              string
 	AccessTokenTTL         time.Duration
@@ -57,14 +62,16 @@ func Load() (*Config, error) {
 	loadDotEnv()
 
 	cfg := &Config{
-		AppEnv:     getEnv("APP_ENV", "development"),
-		AppPort:    getEnv("APP_PORT", "8080"),
-		AppBaseURL: getEnv("APP_BASE_URL", "http://localhost:5173"),
-		DBDSN:      strings.TrimSpace(os.Getenv("DB_DSN")),
-		JWTSecret:  strings.TrimSpace(os.Getenv("JWT_SECRET")),
-		UploadDir:  getEnv("UPLOAD_DIR", "uploads"),
-		BackupDir:  getEnv("BACKUP_DIR", "backups"),
-		BackupDSN:  strings.TrimSpace(os.Getenv("BACKUP_DSN")),
+		AppEnv:       getEnv("APP_ENV", "development"),
+		AppPort:      getEnv("APP_PORT", "8080"),
+		AppBaseURL:   getEnv("APP_BASE_URL", "http://localhost:5173"),
+		DBDSN:        strings.TrimSpace(os.Getenv("DB_DSN")),
+		DBAdminDSN:   strings.TrimSpace(os.Getenv("DB_ADMIN_DSN")),
+		JWTSecret:    strings.TrimSpace(os.Getenv("JWT_SECRET")),
+		UploadDir:    getEnv("UPLOAD_DIR", "uploads"),
+		BackupDir:    getEnv("BACKUP_DIR", "backups"),
+		BackupDSN:    strings.TrimSpace(os.Getenv("BACKUP_DSN")),
+		MetricsToken: strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
 	}
 
 	var err error
@@ -107,8 +114,12 @@ func Load() (*Config, error) {
 	if cfg.SeedDemo, err = getEnvBool("SEED_DEMO", false); err != nil {
 		return nil, err
 	}
+	if cfg.AutoMigrate, err = getEnvBool("AUTO_MIGRATE", false); err != nil {
+		return nil, err
+	}
 
 	cfg.CORSOrigins = splitCSV(os.Getenv("CORS_ORIGINS"))
+	cfg.TrustedProxies = splitCSV(os.Getenv("TRUSTED_PROXIES"))
 	cfg.SeedSuperadminEmail = strings.ToLower(strings.TrimSpace(os.Getenv("SEED_SUPERADMIN_EMAIL")))
 	cfg.SeedSuperadminPassword = os.Getenv("SEED_SUPERADMIN_PASSWORD")
 	cfg.FonnteToken = strings.TrimSpace(os.Getenv("WA_FONNTE_TOKEN"))
@@ -118,6 +129,12 @@ func Load() (*Config, error) {
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
+	}
+	// Manual per-tenant backups stream every tenant table with COPY. In
+	// production the RLS application role cannot do that on a separate
+	// connection, so fall back to the schema owner when BACKUP_DSN is unset.
+	if cfg.BackupDSN == "" {
+		cfg.BackupDSN = cfg.AdminDSN()
 	}
 	return cfg, nil
 }
@@ -133,6 +150,25 @@ func (c *Config) validate() error {
 	}
 	if err := validateDSN(c.DBDSN); err != nil {
 		return err
+	}
+	if c.DBAdminDSN != "" {
+		if err := validateDSN(c.DBAdminDSN); err != nil {
+			return fmt.Errorf("DB_ADMIN_DSN tidak valid: %w", err)
+		}
+	}
+	if c.IsProduction() {
+		if c.SeedDemo {
+			return errors.New("SEED_DEMO harus false di production")
+		}
+		if c.DBAdminDSN == "" {
+			return errors.New("DB_ADMIN_DSN wajib diisi di production agar login, tracking publik, worker, dan migrasi tidak memakai role RLS")
+		}
+		if !strings.HasPrefix(strings.ToLower(c.AppBaseURL), "https://") {
+			return errors.New("APP_BASE_URL wajib memakai https di production")
+		}
+		if len(c.CORSOrigins) == 0 {
+			return errors.New("CORS_ORIGINS wajib diisi di production")
+		}
 	}
 	if len(c.JWTSecret) < 32 {
 		return errors.New("JWT_SECRET minimal 32 karakter")
@@ -197,8 +233,9 @@ func validateDSN(dsn string) error {
 func LoadDBOnly() (*Config, error) {
 	loadDotEnv()
 	cfg := &Config{
-		AppEnv: getEnv("APP_ENV", "development"),
-		DBDSN:  strings.TrimSpace(os.Getenv("DB_DSN")),
+		AppEnv:     getEnv("APP_ENV", "development"),
+		DBDSN:      strings.TrimSpace(os.Getenv("DB_DSN")),
+		DBAdminDSN: strings.TrimSpace(os.Getenv("DB_ADMIN_DSN")),
 	}
 	var err error
 	if cfg.DBMaxOpenConns, err = getEnvInt("DB_MAX_OPEN_CONNS", 25); err != nil {
@@ -219,11 +256,30 @@ func LoadDBOnly() (*Config, error) {
 	if err := validateDSN(cfg.DBDSN); err != nil {
 		return nil, err
 	}
+	if cfg.DBAdminDSN != "" {
+		if err := validateDSN(cfg.DBAdminDSN); err != nil {
+			return nil, fmt.Errorf("DB_ADMIN_DSN tidak valid: %w", err)
+		}
+	}
 	return cfg, nil
 }
 
 // IsProduction reports whether production-only rules should be enforced.
 func (c *Config) IsProduction() bool { return c.AppEnv == "production" }
+
+// AdminDSN returns the privileged connection string used for migrations,
+// seeding, authentication lookups, and public tracking. In small deployments
+// it falls back to DB_DSN. Production sets DB_DSN to the RLS application role
+// (fixphone_app) and DB_ADMIN_DSN to the schema owner.
+func (c *Config) AdminDSN() string {
+	if c.DBAdminDSN != "" {
+		return c.DBAdminDSN
+	}
+	return c.DBDSN
+}
+
+// MigrationDSN is the connection used by migrate/seed/bootstrap commands.
+func (c *Config) MigrationDSN() string { return c.AdminDSN() }
 
 // ParseLogLevel converts a textual level to slog.Level.
 func ParseLogLevel(value string) (slog.Level, error) {

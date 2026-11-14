@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"log/slog"
 	"strings"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/pkg/apperror"
 	"fixphone/backend/internal/pkg/response"
 	"fixphone/backend/internal/pkg/scope"
@@ -20,7 +22,14 @@ type outletRef struct {
 // Tenant resolves the tenant boundary and the active outlet for the request.
 // Owners and admins automatically have access to every outlet in their tenant;
 // other roles only see outlets explicitly assigned to them.
-func Tenant(db *gorm.DB) gin.HandlerFunc {
+//
+// It also starts a request-scoped transaction on the application pool and sets
+// app.tenant_id for PostgreSQL row level security. The transaction is committed
+// for successful responses and rolled back for error responses or panics.
+// resolver should be a privileged pool because resolving the tenant happens
+// before a tenant context exists. In single-role deployments resolver and app
+// may be the same handle.
+func Tenant(resolver, app *gorm.DB, log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		identity, ok := GetAuth(c)
 		if !ok {
@@ -37,7 +46,7 @@ func Tenant(db *gorm.DB) gin.HandlerFunc {
 
 		tenantID := *identity.TenantID
 		var status string
-		if err := db.WithContext(c.Request.Context()).
+		if err := resolver.WithContext(c.Request.Context()).
 			Raw(`SELECT status FROM tenants WHERE id = ?`, tenantID).Scan(&status).Error; err != nil {
 			response.Error(c, apperror.Internal(err))
 			return
@@ -60,7 +69,7 @@ func Tenant(db *gorm.DB) gin.HandlerFunc {
 			args = append(args, identity.UserID)
 		}
 		query += ` ORDER BY name`
-		if err := db.WithContext(c.Request.Context()).Raw(query, args...).Scan(&outlets).Error; err != nil {
+		if err := resolver.WithContext(c.Request.Context()).Raw(query, args...).Scan(&outlets).Error; err != nil {
 			response.Error(c, apperror.Internal(err))
 			return
 		}
@@ -94,7 +103,54 @@ func Tenant(db *gorm.DB) gin.HandlerFunc {
 			tenantScope.ActiveOutletID = &first
 		}
 
+		tx := app.WithContext(c.Request.Context()).Begin()
+		if tx.Error != nil {
+			response.Error(c, apperror.Internal(tx.Error))
+			return
+		}
+		if err := tx.Exec(`SELECT set_config('app.tenant_id', ?, true)`, tenantID.String()).Error; err != nil {
+			_ = tx.Rollback().Error
+			response.Error(c, apperror.Internal(err))
+			return
+		}
+		// Bound every query to a sane statement timeout so a stuck query cannot
+		// hold a pooled connection forever.
+		if err := tx.Exec(`SET LOCAL statement_timeout = '15s'`).Error; err != nil {
+			_ = tx.Rollback().Error
+			response.Error(c, apperror.Internal(err))
+			return
+		}
+		ctx := database.ContextWithTx(c.Request.Context(), tx)
+		c.Request = c.Request.WithContext(ctx)
 		c.Set(scopeKey, tenantScope)
+
+		finished := false
+		defer func() {
+			if finished {
+				return
+			}
+			_ = tx.Rollback().Error
+			if recovered := recover(); recovered != nil {
+				panic(recovered)
+			}
+		}()
+
 		c.Next()
+		finished = true
+
+		if c.Writer.Status() >= 400 {
+			if err := tx.Rollback().Error; err != nil && log != nil {
+				log.Warn("tenant_tx_rollback_failed", "tenant_id", tenantID, "error", err)
+			}
+			return
+		}
+		if err := tx.Commit().Error; err != nil {
+			if log != nil {
+				log.Error("tenant_tx_commit_failed", "tenant_id", tenantID, "error", err)
+			}
+			if !c.Writer.Written() {
+				response.Error(c, apperror.Internal(err))
+			}
+		}
 	}
 }

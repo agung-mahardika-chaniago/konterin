@@ -1,0 +1,124 @@
+# FixPhone Prometheus alert rules. Keep thresholds conservative: the goal is
+# actionable pages, not noise.
+groups:
+  - name: fixphone-availability
+    rules:
+      - alert: FixPhoneApiDown
+        expr: up{job="fixphone-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API FixPhone tidak dapat di-scrape"
+          description: "Prometheus gagal mengambil /metrics dari api:8080 selama 2 menit."
+
+      - alert: FixPhonePublicEndpointDown
+        expr: probe_success{job="blackbox-https"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Situs FixPhone tidak dapat diakses dari luar"
+          description: "Probe HTTPS eksternal gagal selama 3 menit."
+
+      - alert: FixPhoneDatabaseDown
+        expr: fixphone_db_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database FixPhone tidak merespons"
+          description: "Ping database dari API gagal."
+
+      - alert: FixPhoneTLSCertExpiring
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox-https"} - time() < 14 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sertifikat TLS FixPhone akan kedaluwarsa"
+          description: "Sertifikat HTTPS tersisa kurang dari 14 hari. Periksa perpanjangan Caddy/ACME."
+
+  - name: fixphone-performance
+    rules:
+      - alert: FixPhoneApiErrorRateHigh
+        expr: |
+          sum(rate(fixphone_http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(fixphone_http_requests_total[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Error rate API FixPhone di atas 5%"
+          description: "Rasio respons 5xx selama 5 menit melewati ambang 5%."
+
+      - alert: FixPhoneLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(fixphone_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latensi p95 API FixPhone di atas 2 detik"
+          description: "Periksa slow query, statement_timeout, dan beban server."
+
+  - name: fixphone-storage
+    rules:
+      - alert: FixPhoneDiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+          /
+          node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+          < 0.15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk server FixPhone tersisa kurang dari 15%"
+          description: "Bersihkan log/backup lama atau tambah kapasitas disk."
+
+      - alert: FixPhoneDiskWillFill
+        expr: |
+          predict_linear(
+            node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}[6h],
+            24 * 3600
+          ) < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk server FixPhone diprediksi penuh dalam 24 jam"
+          description: "Tren pemakaian disk saat ini menghabiskan ruang dalam 24 jam."
+
+  - name: fixphone-backup
+    rules:
+      - alert: FixPhoneBackupFailed
+        expr: fixphone_backup_last_status == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup FixPhone terakhir gagal"
+          description: "Periksa log container backup dan jalankan backup manual."
+
+      - alert: FixPhoneBackupStale
+        expr: time() - fixphone_backup_last_success_timestamp > 26 * 3600
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup FixPhone lebih dari 26 jam"
+          description: "Tidak ada backup sukses dalam 26 jam. Periksa scheduler dan kredensial offsite."
+
+      - alert: FixPhoneRestoreDrillStale
+        expr: time() - fixphone_restore_drill_last_success_timestamp > 8 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Uji restore FixPhone lebih dari 8 hari"
+          description: "Jalankan drill restore mingguan; periksa RESTORE_DRILL_DSN dan kredensial."

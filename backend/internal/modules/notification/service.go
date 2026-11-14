@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/pkg/apperror"
 
 	"github.com/google/uuid"
@@ -58,11 +59,11 @@ func settingsFor(ctx context.Context, q *gorm.DB, tenantID, outletID uuid.UUID) 
 
 // defaultTemplates are used when the tenant has not customised wa_templates.
 var defaultTemplates = map[string]string{
-	TemplateStatusUpdate: "Halo {customer_name}, status servis {ticket_no} di {store_name} saat ini: {status_label}. Lacak progres: {tracking_url}",
-	TemplateReadyPickup:  "Halo {customer_name}, perangkat {device} untuk tiket {ticket_no} sudah siap diambil di {store_name}. Silakan datang dengan membawa nota servis.",
-	TemplateInvoice:      "Halo {customer_name}, invoice {invoice_no} untuk tiket {ticket_no} sebesar {total_amount}. Terima kasih.",
-	TemplateReminder:     "Halo {customer_name}, pengingat servis {ticket_no} ({device}) di {store_name}: {reminder_text}",
-	TemplateWarranty:     "Halo {customer_name}, garansi servis {ticket_no} berlaku sampai {warranty_end_date}. Simpan pesan ini sebagai bukti garansi.",
+	TemplateStatusUpdate:  "Halo {customer_name}, status servis {ticket_no} di {store_name} saat ini: {status_label}. Lacak progres: {tracking_url}",
+	TemplateReadyPickup:   "Halo {customer_name}, perangkat {device} untuk tiket {ticket_no} sudah siap diambil di {store_name}. Silakan datang dengan membawa nota servis.",
+	TemplateInvoice:       "Halo {customer_name}, invoice {invoice_no} untuk tiket {ticket_no} sebesar {total_amount}. Terima kasih.",
+	TemplateReminder:      "Halo {customer_name}, pengingat servis {ticket_no} ({device}) di {store_name}: {reminder_text}",
+	TemplateWarranty:      "Halo {customer_name}, garansi servis {ticket_no} berlaku sampai {warranty_end_date}. Simpan pesan ini sebagai bukti garansi.",
 	TemplateClaimReceived: "Halo {customer_name}, klaim garansi {claim_no} untuk tiket {ticket_no} telah kami terima. Kami akan menghubungi Anda untuk tindak lanjut.",
 }
 
@@ -117,19 +118,19 @@ func normalizePhone(raw string) string {
 }
 
 type orderContext struct {
-	ID           uuid.UUID  `gorm:"column:id"`
-	TenantID     uuid.UUID  `gorm:"column:tenant_id"`
-	OutletID     uuid.UUID  `gorm:"column:outlet_id"`
-	TicketNo     string     `gorm:"column:ticket_no"`
-	Status       string     `gorm:"column:status"`
-	CustomerID   uuid.UUID  `gorm:"column:customer_id"`
-	CustomerName string     `gorm:"column:customer_name"`
+	ID            uuid.UUID `gorm:"column:id"`
+	TenantID      uuid.UUID `gorm:"column:tenant_id"`
+	OutletID      uuid.UUID `gorm:"column:outlet_id"`
+	TicketNo      string    `gorm:"column:ticket_no"`
+	Status        string    `gorm:"column:status"`
+	CustomerID    uuid.UUID `gorm:"column:customer_id"`
+	CustomerName  string    `gorm:"column:customer_name"`
 	CustomerPhone string    `gorm:"column:customer_phone"`
-	DeviceBrand  string     `gorm:"column:device_brand"`
-	DeviceModel  string     `gorm:"column:device_model"`
-	PublicToken  *string    `gorm:"column:public_token"`
-	InvoiceNo    *string    `gorm:"column:invoice_no"`
-	TotalAmount  int64      `gorm:"column:total_amount"`
+	DeviceBrand   string    `gorm:"column:device_brand"`
+	DeviceModel   string    `gorm:"column:device_model"`
+	PublicToken   *string   `gorm:"column:public_token"`
+	InvoiceNo     *string   `gorm:"column:invoice_no"`
+	TotalAmount   int64     `gorm:"column:total_amount"`
 }
 
 func loadOrderContext(ctx context.Context, q *gorm.DB, tenantID, orderID uuid.UUID) (orderContext, error) {
@@ -598,7 +599,7 @@ func (s *Service) MarkRead(ctx context.Context, actor Actor, id uuid.UUID) error
 	if row.ID == uuid.Nil {
 		return apperror.NotFound("Notifikasi tidak ditemukan.")
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if row.UserID != nil {
 			return tx.Exec(`
 				UPDATE notifications SET is_read = true, read_at = now()
@@ -617,7 +618,7 @@ func (s *Service) MarkAllRead(ctx context.Context, actor Actor) error {
 	if actor.TenantID == uuid.Nil || actor.UserID == uuid.Nil {
 		return apperror.Forbidden("FORBIDDEN", "Endpoint ini hanya tersedia untuk pengguna tenant.")
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			UPDATE notifications SET is_read = true, read_at = now()
 			WHERE tenant_id = ? AND user_id = ? AND is_read = false`,

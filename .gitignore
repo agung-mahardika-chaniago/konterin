@@ -2,9 +2,12 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.pem
 *.key
 !deploy/nginx/*.conf
+deploy/backup/config/*
+!deploy/backup/config/.gitkeep
 
 # ===== Go =====
 backend/bin/

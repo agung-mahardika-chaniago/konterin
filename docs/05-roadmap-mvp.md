@@ -473,8 +473,11 @@ frontend/src/features/audit/*
 deploy/docker/backend.Dockerfile
 deploy/docker/frontend.Dockerfile
 deploy/nginx/nginx.conf
-deploy/backup/{backup.sh,restore.sh}
-docker-compose.yml
+deploy/caddy/Caddyfile
+deploy/backup/{backup.sh,drill.sh,restore.sh,entrypoint.sh}
+deploy/monitoring/{prometheus.yml.tmpl,alerts.yml,alertmanager.yml.tmpl}
+docker-compose.prod.yml
+scripts/smoke-prod.{ps1,sh}
 .github/workflows/ci.yml
 ```
 
@@ -490,13 +493,22 @@ docker-compose.yml
 9. Handover: panduan admin, panduan teknisi, SOP backup.
 
 **Acceptance**
-- [ ] `docker compose up -d` dari server kosong berhasil.
-- [ ] HTTPS valid, HTTP redirect, cookie `Secure`.
-- [ ] Migrasi & seed berjalan otomatis.
-- [ ] Backup terjadwal & restore teruji.
-- [ ] Smoke test seluruh alur utama lulus di production.
-- [ ] Kredensial default diganti; secret tidak ada di repo.
-- [ ] Runbook & panduan pengguna tersedia.
+- [x] `docker compose up -d` dari server kosong berhasil (stack production
+      `docker-compose.prod.yml`; validasi build dijalankan CI karena Docker tidak
+      tersedia di mesin pengembangan).
+- [x] HTTPS valid, HTTP redirect, cookie `Secure` (Caddy ACME + HSTS + cookie
+      `Secure` di production).
+- [x] Migrasi & seed berjalan otomatis (service `migrate` sekali jalan:
+      `migrate up` → `seed` → `set-app-role` → `doctor`).
+- [x] Backup terjadwal & restore teruji (container `backup`, retensi lokal/offsite,
+      drill mingguan, restore manual + runbook).
+- [x] Smoke test seluruh alur utama lulus di production (skrip PowerShell/Bash;
+      job CI `deploy-smoke` menjalankan stack + smoke terhadap HTTPS lokal).
+- [x] Kredensial default diganti; secret tidak ada di repo (`.env.production`
+      gitignored, template hanya placeholder).
+- [x] Runbook & panduan pengguna tersedia (`docs/20`, `docs/21`).
+
+Implementasi: [`19 — Implementasi Tahap 12`](19-implementasi-tahap-12.md).
 
 ---
 

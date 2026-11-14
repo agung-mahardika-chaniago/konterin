@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -203,7 +204,7 @@ func (s *Service) CreateServiceOrder(ctx context.Context, actor Actor, input Cre
 	}
 
 	var result ServiceOrderCreated
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		customerID, txErr := s.resolveCustomer(ctx, tx, actor, input.Customer)
 		if txErr != nil {
 			return txErr

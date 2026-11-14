@@ -38,9 +38,9 @@ type RevenuePoint struct {
 
 // RevenueReport is the revenue aggregation over a period range.
 type RevenueReport struct {
-	Period Period        `json:"period"`
-	From   string        `json:"from"`
-	To     string        `json:"to"`
+	Period Period         `json:"period"`
+	From   string         `json:"from"`
+	To     string         `json:"to"`
 	Items  []RevenuePoint `json:"items"`
 	Total  RevenuePoint   `json:"total"`
 }
@@ -59,28 +59,28 @@ type ServiceTechnicianRow struct {
 
 // ServicesReport summarises service orders in the period.
 type ServicesReport struct {
-	From           string                 `json:"from"`
-	To             string                 `json:"to"`
-	Total          int64                  `json:"total"`
-	Cancelled      int64                  `json:"cancelled"`
-	Completed      int64                  `json:"completed"`
-	InProgress     int64                  `json:"in_progress"`
-	AvgHours       float64                `json:"avg_hours"`
+	From            string                 `json:"from"`
+	To              string                 `json:"to"`
+	Total           int64                  `json:"total"`
+	Cancelled       int64                  `json:"cancelled"`
+	Completed       int64                  `json:"completed"`
+	InProgress      int64                  `json:"in_progress"`
+	AvgHours        float64                `json:"avg_hours"`
 	StatusBreakdown []ServiceStatusRow     `json:"status_breakdown"`
-	TechnicianRank []ServiceTechnicianRow `json:"technician_rank"`
+	TechnicianRank  []ServiceTechnicianRow `json:"technician_rank"`
 }
 
 // BrandRow aggregates service orders by device brand.
 type BrandRow struct {
-	Brand  string `json:"brand"`
-	Count  int64  `json:"count"`
-	Revenue int64 `json:"revenue"`
+	Brand   string `json:"brand"`
+	Count   int64  `json:"count"`
+	Revenue int64  `json:"revenue"`
 }
 
 // BrandsReport lists device brand distribution.
 type BrandsReport struct {
-	From  string    `json:"from"`
-	To    string    `json:"to"`
+	From  string     `json:"from"`
+	To    string     `json:"to"`
 	Items []BrandRow `json:"items"`
 }
 
@@ -100,15 +100,15 @@ type ServiceVsPartsReport struct {
 
 // ProfitReport is the gross/net profit over the period.
 type ProfitReport struct {
-	From             string `json:"from"`
-	To               string `json:"to"`
-	Revenue          int64  `json:"revenue"`
-	Cost             int64  `json:"cost"`
-	GrossProfit      int64  `json:"gross_profit"`
-	ExpenseTotal     int64  `json:"expense_total"`
-	NetProfit        int64  `json:"net_profit"`
-	InvoiceCount     int64  `json:"invoice_count"`
-	AvgInvoice       int64  `json:"avg_invoice"`
+	From         string `json:"from"`
+	To           string `json:"to"`
+	Revenue      int64  `json:"revenue"`
+	Cost         int64  `json:"cost"`
+	GrossProfit  int64  `json:"gross_profit"`
+	ExpenseTotal int64  `json:"expense_total"`
+	NetProfit    int64  `json:"net_profit"`
+	InvoiceCount int64  `json:"invoice_count"`
+	AvgInvoice   int64  `json:"avg_invoice"`
 }
 
 // ExpenseCategoryRow aggregates expenses by category.
@@ -120,20 +120,20 @@ type ExpenseCategoryRow struct {
 
 // ExpensesReport aggregates expenses in the period.
 type ExpensesReport struct {
-	From  string                `json:"from"`
-	To    string                `json:"to"`
-	Items []ExpenseCategoryRow  `json:"items"`
-	Total int64                 `json:"total"`
+	From  string               `json:"from"`
+	To    string               `json:"to"`
+	Items []ExpenseCategoryRow `json:"items"`
+	Total int64                `json:"total"`
 }
 
 // TechnicianRow measures technician productivity.
 type TechnicianRow struct {
-	Name            string  `json:"name"`
-	AssignedCount   int64   `json:"assigned_count"`
-	CompletedCount   int64   `json:"completed_count"`
-	ActiveCount     int64   `json:"active_count"`
-	AvgRepairHours  float64 `json:"avg_repair_hours"`
-	RevenueContrib  int64   `json:"revenue_contribution"`
+	Name           string  `json:"name"`
+	AssignedCount  int64   `json:"assigned_count"`
+	CompletedCount int64   `json:"completed_count"`
+	ActiveCount    int64   `json:"active_count"`
+	AvgRepairHours float64 `json:"avg_repair_hours"`
+	RevenueContrib int64   `json:"revenue_contribution"`
 }
 
 // TechniciansReport lists technician productivity.
@@ -158,9 +158,9 @@ type StockRow struct {
 // StockReport lists sparepart stock with valuation.
 type StockReport struct {
 	Items        []StockRow `json:"items"`
-	TotalValue   int64     `json:"total_value"`
-	TotalItems   int64     `json:"total_items"`
-	LowStockRows int64     `json:"low_stock_rows"`
+	TotalValue   int64      `json:"total_value"`
+	TotalItems   int64      `json:"total_items"`
+	LowStockRows int64      `json:"low_stock_rows"`
 }
 
 // ExportMeta carries the metadata used on every export file.

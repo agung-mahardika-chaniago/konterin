@@ -61,8 +61,8 @@ func (s *Service) FindByTicket(ctx context.Context, ticket, phoneLast4 string) (
 	phoneLast4 = strings.TrimSpace(phoneLast4)
 	if ticket == "" || len(phoneLast4) != 4 || !isDigits(phoneLast4) {
 		return nil, apperror.Validation(map[string]string{
-			"ticket":       "Nomor tiket wajib diisi.",
-			"phone_last4":  "Empat digit terakhir nomor HP wajib berupa angka.",
+			"ticket":      "Nomor tiket wajib diisi.",
+			"phone_last4": "Empat digit terakhir nomor HP wajib berupa angka.",
 		})
 	}
 	var row trackingRow

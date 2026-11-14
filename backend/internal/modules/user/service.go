@@ -135,7 +135,7 @@ func (s *Service) Create(ctx context.Context, actor Actor, input CreateInput) (*
 		isActive = false
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			INSERT INTO users (id, tenant_id, role_id, name, email, phone, password_hash,
 			                   avatar_path, is_active, must_change_password)
@@ -234,7 +234,7 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, input U
 	}
 
 	before := map[string]any{"name": current.Name, "phone": current.Phone, "role": current.RoleSlug, "is_active": current.IsActive}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			UPDATE users SET name = ?, phone = ?, role_id = ?, is_active = ?, updated_at = now()
 			WHERE id = ?`, name, phone, role.ID, isActive, current.ID).Error; err != nil {
@@ -294,7 +294,7 @@ func (s *Service) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 		}
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			UPDATE users
 			SET deleted_at = now(), is_active = false,
@@ -344,7 +344,7 @@ func (s *Service) ResetPassword(ctx context.Context, actor Actor, id uuid.UUID) 
 	if err != nil {
 		return nil, apperror.Internal(err)
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`
 			UPDATE users
 			SET password_hash = ?, must_change_password = true,
@@ -387,7 +387,7 @@ func (s *Service) ReplaceOutlets(ctx context.Context, actor Actor, id uuid.UUID,
 		return nil, err
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`DELETE FROM user_outlets WHERE user_id = ?`, current.ID).Error; err != nil {
 			return err
 		}

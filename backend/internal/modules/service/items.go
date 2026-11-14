@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -53,7 +54,7 @@ func (s *Service) AddItem(ctx context.Context, actor Actor, orderID uuid.UUID, i
 
 	var createdDTO ServiceOrderItemDTO
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		// Check invoice lock: finalized invoices freeze their line items.
 		locked, err := invoiceLocked(tx, orderID, tenantID)
 		if err != nil {
@@ -234,7 +235,7 @@ func (s *Service) DeleteItem(ctx context.Context, actor Actor, orderID, itemID u
 
 	now := time.Now().UTC()
 
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		// Check invoice lock: finalized invoices freeze their line items.
 		locked, err := invoiceLocked(tx, orderID, tenantID)
 		if err != nil {
@@ -336,7 +337,7 @@ func (s *Service) UpdateItem(ctx context.Context, actor Actor, orderID, itemID u
 
 	now := time.Now().UTC()
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		locked, err := invoiceLocked(tx, orderID, tenantID)
 		if err != nil {
 			return err

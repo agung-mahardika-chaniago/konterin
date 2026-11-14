@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fixphone/backend/internal/database"
 	"fixphone/backend/internal/modules/audit"
 	"fixphone/backend/internal/pkg/apperror"
 
@@ -137,7 +138,7 @@ func (s *Service) ChangeStatus(ctx context.Context, actor Actor, orderID uuid.UU
 	var pickupInvoiceTotal, pickupInvoicePaid int64
 	var pickupInvoiceNo string
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		// A hand-over is only allowed when the invoice is settled. Owners may
 		// override the rule with a written reason that is stored in the audit
 		// log and the status history.
@@ -367,7 +368,7 @@ func (s *Service) AssignTechnician(ctx context.Context, actor Actor, orderID uui
 	}
 
 	now := time.Now().UTC()
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = database.WithContext(ctx, s.db).Transaction(func(tx *gorm.DB) error {
 		query := `UPDATE service_orders SET assigned_technician_id = ?, updated_by = ?, updated_at = ?`
 		args := []any{techID, actorID(actor), now}
 

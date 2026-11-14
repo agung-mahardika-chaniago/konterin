@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +18,8 @@ import (
 
 	gormlogger "gorm.io/gorm/logger"
 )
+
+var roleNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -36,6 +41,10 @@ func main() {
 		err = runDBDrop(os.Args[2:])
 	case "db-setup":
 		err = runDBSetup(os.Args[2:])
+	case "set-app-role":
+		err = runSetAppRole(os.Args[2:])
+	case "doctor":
+		err = runDoctor(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("fixphone-cli %s (%s)\n", version.Version, version.Commit)
 	case "help", "--help", "-h":
@@ -62,11 +71,15 @@ Usage:
   fixphone-cli db-create [--name DATABASE]
   fixphone-cli db-drop --name DATABASE --yes [--force]
   fixphone-cli db-setup
+  fixphone-cli set-app-role [--role fixphone_app]
+  fixphone-cli doctor
   fixphone-cli version
 
 Environment:
-  DB_DSN is required. SEED_SUPERADMIN_EMAIL and SEED_SUPERADMIN_PASSWORD are
-  required for "seed". Configuration is loaded from .env automatically.
+  DB_DSN is required. DB_ADMIN_DSN (schema owner) is required for migration,
+  seeding, set-app-role, and doctor in production. SEED_SUPERADMIN_EMAIL and
+  SEED_SUPERADMIN_PASSWORD are required for "seed". APP_DB_PASSWORD is required
+  for "set-app-role". Configuration is loaded from .env automatically.
 `)
 }
 
@@ -86,7 +99,7 @@ func runMigrate(args []string) error {
 	if err != nil {
 		return err
 	}
-	migrator, err := database.NewMigrator(cfg.DBDSN)
+	migrator, err := database.NewMigrator(cfg.MigrationDSN())
 	if err != nil {
 		return err
 	}
@@ -157,7 +170,7 @@ func runSeed(args []string) error {
 		return errors.New("SEED_SUPERADMIN_EMAIL dan SEED_SUPERADMIN_PASSWORD wajib diisi di environment")
 	}
 
-	db, err := database.Open(context.Background(), cfg.DBDSN, database.DefaultOpenOptions())
+	db, err := database.Open(context.Background(), cfg.MigrationDSN(), database.DefaultOpenOptions())
 	if err != nil {
 		return err
 	}
@@ -196,7 +209,7 @@ func runCreateTenant(args []string) error {
 	if err != nil {
 		return err
 	}
-	db, err := database.Open(context.Background(), cfg.DBDSN, database.DefaultOpenOptions())
+	db, err := database.Open(context.Background(), cfg.MigrationDSN(), database.DefaultOpenOptions())
 	if err != nil {
 		return err
 	}
@@ -238,7 +251,7 @@ func runDBCreate(args []string) error {
 			return err
 		}
 	}
-	created, err := database.EnsureDatabase(context.Background(), cfg.DBDSN, *name)
+	created, err := database.EnsureDatabase(context.Background(), cfg.MigrationDSN(), *name)
 	if err != nil {
 		return err
 	}
@@ -268,7 +281,7 @@ func runDBDrop(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := database.DropDatabase(context.Background(), cfg.DBDSN, *name, *force); err != nil {
+	if err := database.DropDatabase(context.Background(), cfg.MigrationDSN(), *name, *force); err != nil {
 		return err
 	}
 	fmt.Printf("database %s dihapus\n", *name)
@@ -292,14 +305,14 @@ func runDBSetup(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	created, err := database.EnsureDatabase(ctx, cfg.DBDSN, name)
+	created, err := database.EnsureDatabase(ctx, cfg.MigrationDSN(), name)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("database utama %s: %s\n", name, createdLabel(created))
 
 	testName := testDatabaseName(name)
-	created, err = database.EnsureDatabase(ctx, cfg.DBDSN, testName)
+	created, err = database.EnsureDatabase(ctx, cfg.MigrationDSN(), testName)
 	if err != nil {
 		return err
 	}
@@ -311,6 +324,193 @@ func runDBSetup(args []string) error {
 	}
 	fmt.Printf("TEST_DB_DSN=%s\n", testDSN)
 	return nil
+}
+
+// runSetAppRole enables LOGIN for the RLS application role and sets its
+// password. It must run with the schema owner (DB_ADMIN_DSN) because the role
+// is created NOLOGIN by the migration. The password is passed to PostgreSQL
+// with format(%L), so it is safely quoted and never written to logs.
+func runSetAppRole(args []string) error {
+	fs := flag.NewFlagSet("set-app-role", flag.ContinueOnError)
+	role := fs.String("role", database.AppRoleName, "nama role aplikasi")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if !roleNamePattern.MatchString(*role) {
+		return errors.New("nama role hanya boleh huruf kecil/angka/underscore")
+	}
+	password := os.Getenv("APP_DB_PASSWORD")
+	if len(password) < 16 {
+		return errors.New("APP_DB_PASSWORD wajib diisi minimal 16 karakter")
+	}
+	if len(password) > 1024 {
+		return errors.New("APP_DB_PASSWORD terlalu panjang (maksimal 1024 karakter)")
+	}
+	if strings.TrimSpace(os.Getenv("DB_ADMIN_DSN")) == "" {
+		return errors.New("set-app-role memerlukan DB_ADMIN_DSN (pemilik skema), bukan DB_DSN aplikasi")
+	}
+
+	cfg, err := config.LoadDBOnly()
+	if err != nil {
+		return err
+	}
+	db, err := sql.Open("pgx", cfg.MigrationDSN())
+	if err != nil {
+		return fmt.Errorf("membuka koneksi admin: %w", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	var exists bool
+	if err := db.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)`, *role).Scan(&exists); err != nil {
+		return fmt.Errorf("memeriksa role: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("role %s belum ada; jalankan 'migrate up' terlebih dahulu", *role)
+	}
+
+	var stmt string
+	if err := db.QueryRowContext(ctx,
+		`SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1, $2)`,
+		*role, password).Scan(&stmt); err != nil {
+		return fmt.Errorf("menyiapkan ALTER ROLE: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, stmt); err != nil {
+		return fmt.Errorf("mengaktifkan role %s: %w", *role, err)
+	}
+	fmt.Printf("role %s: LOGIN aktif, password diperbarui\n", *role)
+	return nil
+}
+
+// runDoctor inspects a database for the checks that commonly break a
+// production deployment: migration state, tenant RLS policies, application
+// role attributes, and leftover demo data.
+func runDoctor(args []string) error {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	role := fs.String("role", database.AppRoleName, "nama role aplikasi")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if !roleNamePattern.MatchString(*role) {
+		return errors.New("nama role hanya boleh huruf kecil/angka/underscore")
+	}
+
+	cfg, err := config.LoadDBOnly()
+	if err != nil {
+		return err
+	}
+	db, err := sql.Open("pgx", cfg.MigrationDSN())
+	if err != nil {
+		return fmt.Errorf("membuka koneksi database: %w", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+
+	problems := make([]string, 0)
+	warnings := make([]string, 0)
+
+	version, dirty, err := database.ReadMigrationState(ctx, db)
+	if err != nil {
+		return fmt.Errorf("membaca status migrasi: %w", err)
+	}
+	switch {
+	case version == 0:
+		problems = append(problems, "skema belum dimigrasi; jalankan 'migrate up'")
+	case version < database.ExpectedVersion:
+		problems = append(problems, fmt.Sprintf("versi migrasi %d lebih lama dari %d; jalankan 'migrate up'", version, database.ExpectedVersion))
+	case version > database.ExpectedVersion:
+		warnings = append(warnings, fmt.Sprintf("versi migrasi %d lebih baru dari versi binary %d", version, database.ExpectedVersion))
+	}
+	if dirty {
+		problems = append(problems, "migrasi berstatus dirty; perbaiki lalu jalankan 'migrate force --version N'")
+	}
+
+	var rlsTables, policies int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*) FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity`).Scan(&rlsTables); err != nil {
+		return fmt.Errorf("menghitung tabel RLS: %w", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM pg_policies WHERE schemaname = 'public'`).Scan(&policies); err != nil {
+		return fmt.Errorf("menghitung policy RLS: %w", err)
+	}
+	if rlsTables < database.ExpectedTenantPolicies || policies < database.ExpectedTenantPolicies {
+		problems = append(problems, fmt.Sprintf(
+			"RLS belum lengkap: %d tabel aktif, %d policy (diharapkan minimal %d)",
+			rlsTables, policies, database.ExpectedTenantPolicies))
+	}
+
+	var canLogin, isSuper, bypassRLS bool
+	err = db.QueryRowContext(ctx,
+		`SELECT rolcanlogin, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`, *role).
+		Scan(&canLogin, &isSuper, &bypassRLS)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		problems = append(problems, fmt.Sprintf("role %s belum ada; jalankan 'migrate up'", *role))
+	case err != nil:
+		return fmt.Errorf("memeriksa role: %w", err)
+	default:
+		if !canLogin {
+			problems = append(problems, fmt.Sprintf("role %s NOLOGIN; jalankan 'set-app-role'", *role))
+		}
+		if isSuper || bypassRLS {
+			problems = append(problems, fmt.Sprintf("role %s dapat melewati RLS (superuser=%t bypassrls=%t)", *role, isSuper, bypassRLS))
+		}
+	}
+
+	var demoTenants int
+	err = db.QueryRowContext(ctx, `
+		SELECT count(*) FROM tenants WHERE slug ILIKE '%demo%' OR name ILIKE '%demo%'`).Scan(&demoTenants)
+	switch {
+	case err != nil && !strings.Contains(strings.ToLower(err.Error()), "does not exist"):
+		return fmt.Errorf("memeriksa data demo: %w", err)
+	case err == nil && demoTenants > 0:
+		warnings = append(warnings, fmt.Sprintf("%d tenant tampak seperti data demo; pastikan tidak dipakai di production", demoTenants))
+	}
+
+	dsnUser := "-"
+	if u, parseErr := urlUser(cfg.DBDSN); parseErr == nil {
+		dsnUser = u
+	}
+
+	fmt.Println("FixPhone doctor")
+	fmt.Printf("  database      : %s\n", dsnUser)
+	fmt.Printf("  migrasi       : versi=%d expected=%d dirty=%t\n", version, database.ExpectedVersion, dirty)
+	fmt.Printf("  RLS           : %d tabel, %d policy\n", rlsTables, policies)
+	fmt.Printf("  role aplikasi : %s login=%t super=%t bypassrls=%t\n", *role, canLogin, isSuper, bypassRLS)
+	fmt.Printf("  data demo     : %d tenant\n", demoTenants)
+	for _, warning := range warnings {
+		fmt.Printf("  PERINGATAN: %s\n", warning)
+	}
+	if len(problems) > 0 {
+		for _, problem := range problems {
+			fmt.Printf("  MASALAH: %s\n", problem)
+		}
+		return fmt.Errorf("doctor menemukan %d masalah", len(problems))
+	}
+	fmt.Println("  hasil         : OK")
+	return nil
+}
+
+func urlUser(dsn string) (string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "", err
+	}
+	if u.User == nil || u.User.Username() == "" {
+		return "-", nil
+	}
+	return u.User.Username(), nil
 }
 
 func testDatabaseName(name string) string {
