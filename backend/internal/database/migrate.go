@@ -136,5 +136,8 @@ func ReadMigrationState(ctx context.Context, sqlDB *sql.DB) (uint, bool, error) 
 	if err != nil {
 		return 0, false, err
 	}
+	if version < 0 {
+		return 0, false, fmt.Errorf("versi migrasi tidak valid: %d", version)
+	}
 	return uint(version), dirty, nil
 }

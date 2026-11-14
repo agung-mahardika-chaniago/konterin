@@ -137,7 +137,7 @@ func (h *Handler) DownloadBackup(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path berasal dari metadata backup yang tersimpan, bukan input mentah pengguna.
 	if err != nil {
 		response.Error(c, apperror.Internal(err))
 		return

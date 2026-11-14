@@ -22,7 +22,7 @@ import (
 // DefaultDSN matches the portable development cluster on port 55432. The
 // password is ignored by the portable cluster (trust auth) but matches the
 // Docker Compose default so the same .env works for both.
-const DefaultDSN = "postgres://postgres:postgres@127.0.0.1:55432/fixphone_test?sslmode=disable"
+const DefaultDSN = "postgres://postgres:postgres@127.0.0.1:55432/fixphone_test?sslmode=disable" // #nosec G101 -- DSN database uji sekali pakai, bukan kredensial produksi.
 
 // DSN returns the test database DSN.
 func DSN() string {

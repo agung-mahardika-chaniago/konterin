@@ -170,10 +170,10 @@ func (s *Service) CreateServiceOrder(ctx context.Context, actor Actor, input Cre
 	var credentialSetAt *time.Time
 	if input.Credential != nil && strings.TrimSpace(input.Credential.Value) != "" {
 		if !validCredentialType(input.Credential.Type) {
-			return nil, apperror.Validation(map[string]string{"credential.type": "Tipe kredensial harus pin, password, atau pattern."})
+			return nil, apperror.Validation(map[string]string{"credential.type": "Tipe kredensial harus pin, password, atau pattern."}) // #nosec G101 -- teks validasi untuk pengguna, bukan kredensial hardcoded.
 		}
 		if !validCredentialValue(input.Credential.Value) {
-			return nil, apperror.Validation(map[string]string{"credential.value": "Kredensial wajib diisi, maksimal 200 karakter."})
+			return nil, apperror.Validation(map[string]string{"credential.value": "Kredensial wajib diisi, maksimal 200 karakter."}) // #nosec G101 -- teks validasi untuk pengguna, bukan kredensial hardcoded.
 		}
 		credentialEnc, err = encryptCredential(s.opts.EncKey, input.Credential.Value)
 		if err != nil {

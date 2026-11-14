@@ -59,11 +59,12 @@ func (d *TenantDump) Run(ctx context.Context, tenantID uuid.UUID, tables []backu
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
 
-	if err := os.MkdirAll(d.dir, 0o755); err != nil {
+	if err := os.MkdirAll(d.dir, 0o750); err != nil {
 		return DumpStats{}, fmt.Errorf("membuat folder backup gagal: %w", err)
 	}
 	path := filepath.Join(d.dir, d.fileName)
-	file, err := os.Create(path)
+	// #nosec G304 -- path dibentuk dari folder backup terkonfigurasi dan nama file internal, bukan input pengguna.
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return DumpStats{}, fmt.Errorf("membuat file backup gagal: %w", err)
 	}
@@ -116,7 +117,7 @@ func ensureDir(dir string) error {
 	if strings.TrimSpace(dir) == "" {
 		return fmt.Errorf("folder backup belum dikonfigurasi")
 	}
-	return os.MkdirAll(dir, 0o755)
+	return os.MkdirAll(dir, 0o750)
 }
 
 func filepathJoin(dir, name string) string { return filepath.Join(dir, name) }

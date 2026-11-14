@@ -51,8 +51,12 @@ check() {
 
 log "FixPhone smoke test -> $BASE_URL"
 check 'liveness /healthz' 200 GET /healthz
-if ! jq -e '.status == "ok"' "$BODY" >/dev/null 2>&1; then
-    bad '/healthz bukan JSON status ok (SPA fallback?)'
+# The Nginx edge answers /healthz with plain "ok" while the API returns JSON.
+# Accept either shape, but reject the SPA fallback (HTML).
+if jq -e '.status == "ok"' "$BODY" >/dev/null 2>&1 || [ "$(tr -d '[:space:]' < "$BODY")" = "ok" ]; then
+    ok 'liveness response valid'
+else
+    bad '/healthz bukan JSON status ok atau teks ok (SPA fallback?)'
 fi
 check 'readiness /readyz' 200 GET /readyz
 if jq -e '.status == "ready" and .database == "up"' "$BODY" >/dev/null 2>&1; then

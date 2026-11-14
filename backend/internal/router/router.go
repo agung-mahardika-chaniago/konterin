@@ -196,7 +196,7 @@ func buildEngine(cfg *config.Config, db, adminDB *gorm.DB, log *slog.Logger) *gi
 		auditviewmod.RegisterRoutes(api, auditviewmod.NewHandler(auditViewer), authMiddleware, tenantMiddleware, can)
 	}
 
-	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.UploadDir, 0o750); err != nil {
 		log.Warn("upload_dir_unavailable", "dir", cfg.UploadDir, "error", err)
 	} else {
 		r.Static("/uploads", cfg.UploadDir)

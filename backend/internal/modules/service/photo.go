@@ -86,12 +86,12 @@ func (s *Service) AddPhoto(
 	}
 	relativeDir := path.Join("services", orderID.String())
 	diskDir := filepath.Join(s.opts.UploadDir, filepath.FromSlash(relativeDir))
-	if err := os.MkdirAll(diskDir, 0o755); err != nil {
+	if err := os.MkdirAll(diskDir, 0o750); err != nil {
 		return nil, apperror.Internal(err)
 	}
 	fileName := photoID.String() + ext
 	diskPath := filepath.Join(diskDir, fileName)
-	destination, err := os.OpenFile(diskPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	destination, err := os.OpenFile(diskPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- path dibentuk dari folder upload terkonfigurasi dan UUID internal.
 	if err != nil {
 		return nil, apperror.Internal(err)
 	}

@@ -51,19 +51,32 @@ function Fail([string]$Message) {
 }
 
 function Find-PgTool([string]$Name) {
-  $exe = if ($Name -match '\.exe$') { $Name } else { "$Name.exe" }
-
-  $cmd = Get-Command $exe -ErrorAction SilentlyContinue
+  $cmd = Get-Command $Name -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
 
+  # Windows client binaries carry an .exe suffix; Linux/macOS runners do not.
+  $isWindowsHost = $env:OS -eq 'Windows_NT'
+  $exe = if ($isWindowsHost) { "$Name.exe" } else { $Name }
+
   $candidates = @()
-  if ($env:ProgramFiles) {
-    $candidates += Get-ChildItem (Join-Path $env:ProgramFiles 'PostgreSQL') -Directory -ErrorAction SilentlyContinue |
-      Sort-Object Name -Descending |
-      ForEach-Object { Join-Path $_.FullName "bin\$exe" }
+  if ($isWindowsHost) {
+    if ($env:ProgramFiles) {
+      $candidates += Get-ChildItem (Join-Path $env:ProgramFiles 'PostgreSQL') -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "bin\$exe" }
+    }
+  } else {
+    foreach ($root in @('/usr/lib/postgresql', '/usr/local/pgsql', '/opt/homebrew/opt')) {
+      $candidates += Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "bin\$exe" }
+    }
   }
-  $candidates += Join-Path $DevDir "pgsql\bin\$exe"
-  $candidates += Get-ChildItem (Join-Path $DevDir 'tools\pgsql-client') -Recurse -Filter $exe -ErrorAction SilentlyContinue |
+  $pgBin = Join-Path (Join-Path $DevDir 'pgsql') 'bin'
+  $clientDir = Join-Path (Join-Path $DevDir 'tools') 'pgsql-client'
+  $candidates += Join-Path $pgBin $exe
+  $candidates += Join-Path $pgBin $Name
+  $candidates += Get-ChildItem $clientDir -Recurse -Filter $exe -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName
 
   foreach ($candidate in $candidates) {

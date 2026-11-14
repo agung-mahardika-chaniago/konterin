@@ -374,7 +374,7 @@ func runSetAppRole(args []string) error {
 
 	var stmt string
 	if err := db.QueryRowContext(ctx,
-		`SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1, $2)`,
+		`SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1::text, $2::text)`,
 		*role, password).Scan(&stmt); err != nil {
 		return fmt.Errorf("menyiapkan ALTER ROLE: %w", err)
 	}
