@@ -545,7 +545,7 @@ Implementasi: [`19 — Implementasi Tahap 12`](19-implementasi-tahap-12.md).
 ## 6. Rencana Rilis & Branching
 
 ```
-main
+master
  ├── feat/02-database
  ├── feat/03-auth
  ├── feat/04-shell-dashboard
@@ -559,7 +559,9 @@ main
  └── chore/12-deploy
 ```
 
-Tag: `v0.2.0` … `v0.9.0`, `v1.0.0-rc.1`, `v1.0.0`.
+Trunk rilis adalah `master` (default branch repositori). CI berjalan pada push
+ke `master` maupun `main` agar kompatibel dengan repositori yang memakai
+`main`. Tag: `v0.2.0` … `v0.9.0`, `v1.0.0-rc.1`, `v1.0.0`.
 
 ---
 
