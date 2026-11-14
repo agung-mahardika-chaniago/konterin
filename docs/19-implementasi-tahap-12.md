@@ -156,7 +156,7 @@ Test lama `rls_test.go` (SQL mentah) tetap berjalan sebagai lapisan kedua.
 `deploy/docker/frontend.Dockerfile`:
 
 - Build `node:22-alpine` → `npm ci` → `npm run build`.
-- Runtime `nginxinc/nginx-unprivileged:1.27-alpine`, user **101**, listen 8080.
+- Runtime `nginxinc/nginx-unprivileged:1.30-alpine`, user **101**, listen 8080.
 - `deploy/nginx/nginx.conf` menangani SPA fallback, cache aset hash 1 tahun,
   gzip, security header, dan proxy `/api` + `/uploads`. `/readyz` dan
   `/version` diproxyeksplisit ke API agar fallback SPA tidak menjawab `200`

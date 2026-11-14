@@ -168,7 +168,20 @@ jobs:
             --outlet-code "MAIN"
 
       - name: Run restore drill
-        run: pwsh -NoProfile -File scripts/restore-drill.ps1 -SourceDSN "$env:DB_DSN"
+        run: |
+          set -o pipefail
+          pwsh -NoProfile -File scripts/restore-drill.ps1 -SourceDSN "$env:DB_DSN" 2>&1 | tee /tmp/restore-drill.log
+
+      - name: Report restore drill failure
+        if: failure()
+        run: |
+          tail -n 30 /tmp/restore-drill.log || true
+          grep -iE 'fail|error|gagal|exception' /tmp/restore-drill.log | tail -n 10 | while IFS= read -r line; do
+            echo "::error::${line:0:900}"
+          done || true
+          tail -n 5 /tmp/restore-drill.log | while IFS= read -r line; do
+            echo "::error::tail: ${line:0:880}"
+          done || true
 
   images:
     name: Container images & vulnerability scan
@@ -238,6 +251,15 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+      - name: Report Trivy findings
+        if: failure()
+        run: |
+          for image in fixphone-backend:ci fixphone-frontend:ci fixphone-backup:ci; do
+            echo "--- scan $image ---"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+              image --quiet --severity CRITICAL --ignore-unfixed --format table "$image" 2>&1 | tail -n 40 || true
+          done
+
   deploy-smoke:
     name: Production stack smoke test
     runs-on: ubuntu-latest
@@ -277,7 +299,29 @@ jobs:
           EOF
 
       - name: Build and start the production stack
-        run: docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+        run: |
+          set -o pipefail
+          docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build 2>&1 | tee /tmp/compose-up.log
+
+      - name: Report stack failure
+        if: failure()
+        run: |
+          echo '--- compose up (tail) ---'
+          tail -n 80 /tmp/compose-up.log || true
+          grep -iE 'error|failed|no such|cannot|panic|exit code' /tmp/compose-up.log | tail -n 10 | while IFS= read -r line; do
+            echo "::error::${line:0:900}"
+          done || true
+          tail -n 5 /tmp/compose-up.log | while IFS= read -r line; do
+            echo "::error::tail: ${line:0:880}"
+          done || true
+          echo '--- compose ps ---'
+          docker compose --env-file .env.production -f docker-compose.prod.yml ps || true
+          echo '--- migrate/api logs ---'
+          docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=120 migrate api 2>&1 | tail -n 160 || true
+          docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=200 2>&1 |
+            grep -iE 'error|fatal|panic|failed' | tail -n 10 | while IFS= read -r line; do
+              echo "::error::${line:0:900}"
+            done || true
 
       - name: Wait for HTTPS edge
         run: |
