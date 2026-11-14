@@ -170,7 +170,7 @@ jobs:
       - name: Run restore drill
         run: |
           set -o pipefail
-          pwsh -NoProfile -File scripts/restore-drill.ps1 -SourceDSN "$env:DB_DSN" 2>&1 | tee /tmp/restore-drill.log
+          pwsh -NoProfile -File scripts/restore-drill.ps1 -SourceDSN "$DB_DSN" 2>&1 | tee /tmp/restore-drill.log
 
       - name: Report restore drill failure
         if: failure()
@@ -257,7 +257,11 @@ jobs:
           for image in fixphone-backend:ci fixphone-frontend:ci fixphone-backup:ci; do
             echo "--- scan $image ---"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
-              image --quiet --severity CRITICAL --ignore-unfixed --format table "$image" 2>&1 | tail -n 40 || true
+              image --quiet --severity CRITICAL --ignore-unfixed --format table "$image" 2>&1 | tail -n 40 |
+              while IFS= read -r line; do
+                echo "$line"
+                echo "::error::trivy ${image}: ${line:0:860}"
+              done || true
           done
 
   deploy-smoke:

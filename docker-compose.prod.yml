@@ -94,7 +94,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD wajib diisi}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
