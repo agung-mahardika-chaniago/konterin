@@ -30,7 +30,10 @@ RUN set -eux; \
 # Runtime image: minimal Alpine, non-root uid 10001, no shell tooling beyond
 # busybox wget for the container health check.
 FROM alpine:3.21 AS runtime
-RUN apk add --no-cache ca-certificates tzdata wget \
+# Refresh Alpine security patches at build time so stale base layers cannot
+# reintroduce fixed CVEs between upstream tag rebuilds.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates tzdata wget \
     && addgroup -g 10001 -S fixphone \
     && adduser -u 10001 -S -G fixphone -h /app fixphone \
     && mkdir -p /app/uploads /app/backups \

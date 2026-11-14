@@ -3,7 +3,8 @@
 # copy via rclone, weekly restore drill, and Prometheus textfile metrics.
 FROM alpine:3.21
 
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
         ca-certificates \
         tzdata \
         postgresql-client \

@@ -147,7 +147,9 @@ Test lama `rls_test.go` (SQL mentah) tetap berjalan sebagai lapisan kedua.
   ldflags mengisi versi/commit/tanggal.
 - Satu image berisi `fixphone-api`, `fixphone-worker`, `fixphone-cli`.
 - Runtime `alpine:3.21`, user **10001:10001**, hanya `ca-certificates`, `tzdata`,
-  `wget` (health check).
+  `wget` (health check). `apk upgrade --no-cache` dijalankan saat build agar
+  patch keamanan Alpine (mis. CVE yang sudah `fixed`) ikut terpasang tanpa
+  menunggu tag upstream di-rebuild.
 - `/app/uploads` dan `/app/backups` dimiliki user aplikasi.
 - `HEALTHCHECK` memakai `/healthz`; Compose memakai `/readyz`.
 
@@ -157,6 +159,8 @@ Test lama `rls_test.go` (SQL mentah) tetap berjalan sebagai lapisan kedua.
 
 - Build `node:22-alpine` → `npm ci` → `npm run build`.
 - Runtime `nginxinc/nginx-unprivileged:1.30-alpine`, user **101**, listen 8080.
+  `apk upgrade --no-cache` (sebagai root, lalu kembali ke uid 101) memastikan
+  paket OS seperti `brotli-libs` berada di versi yang sudah dipatch.
 - `deploy/nginx/nginx.conf` menangani SPA fallback, cache aset hash 1 tahun,
   gzip, security header, dan proxy `/api` + `/uploads`. `/readyz` dan
   `/version` diproxyeksplisit ke API agar fallback SPA tidak menjawab `200`
@@ -323,7 +327,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml \
 | `frontend` | typecheck, Vitest, build |
 | `security` | gosec, govulncheck, npm audit |
 | `restore-drill` | dump + restore + verifikasi |
-| `images` | build backend/frontend/backup, Trivy CRITICAL (`ignore-unfixed`) |
+| `images` | build backend/frontend/backup, Trivy CRITICAL (`ignore-unfixed`); temuan CVE muncul sebagai anotasi check-run dan artefak `trivy-reports` |
 | `deploy-smoke` | Compose production + tenant + smoke + ZAP advisory |
 | `e2e` | Playwright alur servis |
 
