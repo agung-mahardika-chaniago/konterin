@@ -10,6 +10,8 @@ deploy/backup/config/*
 !deploy/backup/config/.gitkeep
 
 # ===== Go =====
+# Launcher Windows hasil build (scripts/build-launcher.ps1).
+/FixPhone.exe
 backend/bin/
 backend/tmp/
 backend/uploads/*

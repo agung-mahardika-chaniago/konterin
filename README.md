@@ -188,7 +188,8 @@ Perilaku autentikasi, RBAC, dan cara reset password dijelaskan di
 
 ### 4.4 Menjalankan cepat tanpa Docker (Windows)
 
-Dobel-klik **`FixPhone-Mulai.cmd`**. Launcher otomatis:
+Dobel-klik **`FixPhone.exe`** (launcher native) atau **`FixPhone-Mulai.cmd`**.
+Launcher otomatis:
 
 1. membuat `.env` dari templat beserta secret acak (bila belum ada),
 2. mengunduh + menjalankan PostgreSQL portable (port 55432),
@@ -197,18 +198,29 @@ Dobel-klik **`FixPhone-Mulai.cmd`**. Launcher otomatis:
 5. membangun API dan menjalankan Vite, lalu membuka
    `http://127.0.0.1:5173`.
 
-Hentikan dengan **`FixPhone-Hentikan.cmd`**. Perintah manual yang setara:
+Hentikan dengan **`FixPhone-Hentikan.cmd`** atau `FixPhone.exe stop`. Perintah
+manual yang setara:
 
 ```powershell
+.\FixPhone.exe start
+.\FixPhone.exe status
+.\FixPhone.exe logs -Follow
+.\FixPhone.exe stop
+.\FixPhone.exe shortcut
+
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 start
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 status
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 logs
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 stop
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 shortcut
+```
+
+`FixPhone.exe` adalah launcher tipis (~1,8 MB, tanpa dependency) yang
+meneruskan perintah ke `scripts/fixphone.ps1`; keduanya setara. Binary-nya tidak
+di-commit ke Git, jadi setelah clone baru bangun sekali:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-launcher.ps1
 ```
 
 Proses berjalan di background; PID dan log ada di `.dev/run/`. Prasyarat hanya
-Go 1.26+ dan Node.js 20+ — Docker tidak diperlukan. Launcher tidak membuat data
+Go 1.26+ dan Node.js 20+ - Docker tidak diperlukan. Launcher tidak membuat data
 contoh: tenant pertama dibuat dari input Anda (atau parameter
 `-TenantName`, `-OwnerEmail`, `-OwnerPassword`).
 

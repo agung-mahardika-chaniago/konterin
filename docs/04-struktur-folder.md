@@ -13,6 +13,10 @@ MANAJEMEN_HP_TEKNISI/
 ├── deploy/
 ├── docs/
 ├── scripts/
+├── tools/
+│   └── launcher/          # Sumber FixPhone.exe (launcher Windows)
+├── FixPhone-Mulai.cmd     # Dobel-klik: jalankan
+├── FixPhone-Hentikan.cmd  # Dobel-klik: hentikan
 ├── .editorconfig
 ├── .gitignore
 ├── .env.example
@@ -20,6 +24,9 @@ MANAJEMEN_HP_TEKNISI/
 ├── Makefile
 └── README.md
 ```
+
+`FixPhone.exe` dibangun dari `tools/launcher` (lihat
+`scripts/build-launcher.ps1`) dan tidak di-commit.
 
 Folder `backend`, `frontend`, `deploy`, dan file root akan dibuat pada tahap
 implementasi. Dokumen ini menetapkan **target struktur** agar setiap tahap
@@ -377,6 +384,7 @@ Root `docker-compose.yml` mendefinisikan service: `postgres`, `migrate`,
 ```
 scripts/
 ├── fixphone.ps1       # Launcher Windows: DB + API + frontend (tanpa Docker)
+├── build-launcher.ps1 # Bangun FixPhone.exe dari tools/launcher
 ├── dev-db.ps1         # PostgreSQL portable (download/init/start/stop/reset)
 ├── restore-drill.ps1  # Backup & restore drill
 ├── smoke-prod.ps1     # Smoke test production (PowerShell)
