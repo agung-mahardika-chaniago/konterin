@@ -224,6 +224,23 @@ Go 1.26+ dan Node.js 20+ - Docker tidak diperlukan. Launcher tidak membuat data
 contoh: tenant pertama dibuat dari input Anda (atau parameter
 `-TenantName`, `-OwnerEmail`, `-OwnerPassword`).
 
+Setelah muncul `FixPhone berjalan`, jendela launcher boleh ditutup: database,
+API, dan frontend dijalankan terpisah dari jendela tersebut sehingga tetap
+hidup sampai Anda memanggil `stop`.
+
+Jika login menampilkan pesan **"Server FixPhone tidak merespons"** atau
+**"Tidak dapat terhubung ke server"**:
+
+```powershell
+.\FixPhone.exe status    # lihat bagian mana yang berhenti
+.\FixPhone.exe start     # nyalakan ulang komponen yang mati (aman diulang)
+```
+
+Penyebab umum: jendela launcher ditutup paksa dengan Ctrl+C pada versi lama,
+atau proses API berhenti karena database belum siap. Log lengkap ada di
+`.dev/run/api.log`, `.dev/run/web.log`, dan `.dev/postgres.log`
+(`.\FixPhone.exe logs`).
+
 ### 4.5 Makefile
 
 Jika GNU Make tersedia:

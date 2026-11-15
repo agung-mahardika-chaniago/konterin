@@ -57,7 +57,7 @@ export function LoginPage() {
         setError(caught.message);
         setFieldErrors(caught.fieldErrors());
       } else {
-        setError('Tidak dapat masuk. Periksa koneksi Anda lalu coba lagi.');
+        setError('Tidak dapat masuk. Pastikan server FixPhone berjalan lalu coba lagi.');
       }
     } finally {
       setSubmitting(false);

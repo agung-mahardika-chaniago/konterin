@@ -142,6 +142,39 @@ function Test-PortListening([int]$Port) {
   }
 }
 
+function Get-PortPid([int]$Port) {
+  $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($conn) { return [int]$conn.OwningProcess }
+  return 0
+}
+
+# Menjalankan proses tanpa console induk supaya tetap hidup ketika jendela
+# launcher ditutup. Output tetap dicatat lewat cmd (>> out 2>> err).
+function Start-DetachedLogged([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory, [string]$OutLog, [string]$ErrLog) {
+  $quoted = foreach ($arg in $Arguments) {
+    if ($arg -match '[\s"]') { '"' + ($arg -replace '"', '\"') + '"' } else { $arg }
+  }
+  $inner = '"' + $FilePath + '"'
+  if ($quoted) { $inner += ' ' + ($quoted -join ' ') }
+  $inner += ' >> "' + $OutLog + '" 2>> "' + $ErrLog + '"'
+  $commandLine = 'cmd.exe /d /s /c "' + $inner + '"'
+
+  $result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine      = $commandLine
+    CurrentDirectory = $WorkingDirectory
+  }
+  if ($result.ReturnValue -ne 0) {
+    throw "Gagal menjalankan proses (kode $($result.ReturnValue)): $commandLine"
+  }
+  return [int]$result.ProcessId
+}
+
+function Show-LogTail([string]$Label, [string]$Path, [int]$Lines = 12) {
+  if (-not (Test-Path $Path)) { return }
+  Write-Host "  --- $Label ($Path) ---" -ForegroundColor DarkGray
+  Get-Content $Path -Tail $Lines | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+}
+
 function Wait-Http([string]$Url, [int]$TimeoutSeconds) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while ((Get-Date) -lt $deadline) {
@@ -346,29 +379,40 @@ function Start-FixPhone {
 
   New-FirstTenant $dsn
 
-  if (Test-AlivePid $ApiPidFile) {
+  if ((Test-AlivePid $ApiPidFile) -and (Test-ApiReady $apiPort)) {
     Write-Ok "API sudah berjalan (pid $(Get-Content $ApiPidFile | Select-Object -First 1))"
   } else {
+    if (Test-AlivePid $ApiPidFile) {
+      Write-Warn 'API berjalan tetapi belum siap; memulai ulang proses API'
+      Stop-FromPidFile $ApiPidFile 'API'
+    }
     if (Test-PortListening $apiPort) {
       throw "Port $apiPort sudah dipakai proses lain. Hentikan proses itu atau jalankan: scripts/fixphone.ps1 stop"
     }
     $apiExe = Join-Path $BinDir 'fixphone-api.exe'
     Invoke-GoBuild $apiExe './cmd/api'
     Write-Step "Menjalankan API di http://127.0.0.1:$apiPort"
-    $apiProcess = Start-Process -FilePath $apiExe -WorkingDirectory $BackendDir `
-      -RedirectStandardOutput $ApiLogFile -RedirectStandardError $ApiErrFile `
-      -WindowStyle Hidden -PassThru
-    Set-Content -Path $ApiPidFile -Value $apiProcess.Id
+    $wrapperPid = Start-DetachedLogged $apiExe @() $BackendDir $ApiLogFile $ApiErrFile
     if (-not (Wait-Http "http://127.0.0.1:$apiPort/readyz" 90)) {
-      Write-Warn "API belum siap. Lihat log: $ApiLogFile"
-    } else {
-      Write-Ok "API siap (pid $($apiProcess.Id))"
+      Write-Warn 'API belum siap. Periksa log berikut:'
+      Show-LogTail 'API' $ApiLogFile
+      Show-LogTail 'API error' $ApiErrFile
+    }
+    $appPid = Get-PortPid $apiPort
+    if ($appPid -eq 0) { $appPid = $wrapperPid }
+    Set-Content -Path $ApiPidFile -Value $appPid
+    if (Test-ApiReady $apiPort) {
+      Write-Ok "API siap (pid $appPid)"
     }
   }
 
-  if (Test-AlivePid $WebPidFile) {
+  if ((Test-AlivePid $WebPidFile) -and (Test-PortListening $webPort)) {
     Write-Ok "Frontend sudah berjalan (pid $(Get-Content $WebPidFile | Select-Object -First 1))"
   } else {
+    if (Test-AlivePid $WebPidFile) {
+      Write-Warn 'Frontend berjalan tetapi port belum siap; memulai ulang proses frontend'
+      Stop-FromPidFile $WebPidFile 'Frontend'
+    }
     if (Test-PortListening $webPort) {
       throw "Port $webPort sudah dipakai proses lain. Hentikan proses itu atau jalankan: scripts/fixphone.ps1 stop"
     }
@@ -384,16 +428,18 @@ function Start-FixPhone {
       }
     }
     Write-Step "Menjalankan frontend di http://127.0.0.1:$webPort"
-    $webProcess = Start-Process -FilePath 'node' `
-      -ArgumentList @($viteEntry, '--host', '127.0.0.1', '--port', "$webPort", '--strictPort') `
-      -WorkingDirectory $FrontendDir `
-      -RedirectStandardOutput $WebLogFile -RedirectStandardError $WebErrFile `
-      -WindowStyle Hidden -PassThru
-    Set-Content -Path $WebPidFile -Value $webProcess.Id
+    $nodeExe = (Get-Command node).Source
+    $wrapperPid = Start-DetachedLogged $nodeExe @($viteEntry, '--host', '127.0.0.1', '--port', "$webPort", '--strictPort') $FrontendDir $WebLogFile $WebErrFile
     if (-not (Wait-Http "http://127.0.0.1:$webPort/" 90)) {
-      Write-Warn "Frontend belum siap. Lihat log: $WebLogFile"
-    } else {
-      Write-Ok "Frontend siap (pid $($webProcess.Id))"
+      Write-Warn 'Frontend belum siap. Periksa log berikut:'
+      Show-LogTail 'Frontend' $WebLogFile
+      Show-LogTail 'Frontend error' $WebErrFile
+    }
+    $webAppPid = Get-PortPid $webPort
+    if ($webAppPid -eq 0) { $webAppPid = $wrapperPid }
+    Set-Content -Path $WebPidFile -Value $webAppPid
+    if (Test-PortListening $webPort) {
+      Write-Ok "Frontend siap (pid $webAppPid)"
     }
   }
 
@@ -412,10 +458,39 @@ function Start-FixPhone {
   }
 }
 
+function Stop-PortOwner([int]$Port, [string]$Label) {
+  $portPid = Get-PortPid $Port
+  if ($portPid -le 0) { return }
+  $process = Get-Process -Id $portPid -ErrorAction SilentlyContinue
+  if (-not $process) { return }
+
+  $expected = if ($Label -eq 'Frontend') { 'node' } else { 'fixphone-api' }
+  if ($process.ProcessName -ne $expected) {
+    Write-Warn "Port $Port dipakai proses lain ($($process.ProcessName), pid $portPid); tidak dihentikan"
+    return
+  }
+
+  Stop-Process -Id $portPid -Force
+  for ($i = 0; $i -lt 20; $i++) {
+    Start-Sleep -Milliseconds 250
+    if (-not (Test-PortListening $Port)) { break }
+  }
+  Write-Ok "$Label dihentikan (pid $portPid, dilepas dari port $Port)"
+}
+
 function Stop-FixPhone {
+  $envMap = Read-DotEnv
+  $apiPort = 8080
+  if ($envMap.ContainsKey('APP_PORT') -and $envMap['APP_PORT']) { $apiPort = [int]$envMap['APP_PORT'] }
+  $webPort = 5173
+
   Write-Step 'Menghentikan FixPhone'
   Stop-FromPidFile $WebPidFile 'Frontend'
   Stop-FromPidFile $ApiPidFile 'API'
+  # Jaring pengaman untuk proses yatim, mis. setelah jendela launcher lama
+  # ditutup sebelum sempat menulis pid file.
+  Stop-PortOwner $webPort 'Frontend'
+  Stop-PortOwner $apiPort 'API'
   if (Test-Path $DevDbScript) { Invoke-DevDb 'stop' }
   Write-Ok 'Semua proses dihentikan'
 }
@@ -436,18 +511,28 @@ function Show-Status {
     Write-Warn 'PostgreSQL portable belum diunduh'
   }
 
-  if (Test-ApiReady $apiPort) {
+  $apiReady = Test-ApiReady $apiPort
+  if ($apiReady) {
     Write-Ok "API siap di http://127.0.0.1:$apiPort"
   } else {
     Write-Warn "API tidak merespons /readyz di port $apiPort"
   }
 
+  $webReady = $false
   try {
     $response = Invoke-WebRequest -Uri "http://127.0.0.1:$webPort/" -UseBasicParsing -TimeoutSec 5
-    if ($response.StatusCode -eq 200) { Write-Ok "Frontend berjalan di http://127.0.0.1:$webPort" }
+    if ($response.StatusCode -eq 200) { $webReady = $true; Write-Ok "Frontend berjalan di http://127.0.0.1:$webPort" }
     else { Write-Warn "Frontend merespons status $($response.StatusCode)" }
   } catch {
     Write-Warn "Frontend tidak merespons di port $webPort"
+  }
+
+  Write-Host ''
+  if ($apiReady -and $webReady) {
+    Write-Host "  Buka aplikasi: http://127.0.0.1:$webPort" -ForegroundColor Cyan
+  } else {
+    Write-Warn 'Aplikasi belum siap dipakai. Jalankan: FixPhone.exe start'
+    Write-Host '     (atau: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 start)'
   }
 }
 

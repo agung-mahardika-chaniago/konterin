@@ -115,6 +115,25 @@ function Test-Running {
   return ($LASTEXITCODE -eq 0)
 }
 
+# Win32_Process.Create menjalankan proses tanpa console induk. Tanpa ini,
+# menutup jendela launcher mengirim CTRL_CLOSE_EVENT ke postgres dan
+# mematikannya (gejala: API mati, login gagal "periksa koneksi").
+function Start-DetachedProcess([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory) {
+  $quoted = foreach ($arg in $Arguments) {
+    if ($arg -match '[\s"]') { '"' + ($arg -replace '"', '\"') + '"' } else { $arg }
+  }
+  $commandLine = '"' + $FilePath + '"'
+  if ($quoted) { $commandLine += ' ' + ($quoted -join ' ') }
+  $result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine      = $commandLine
+    CurrentDirectory = $WorkingDirectory
+  }
+  if ($result.ReturnValue -ne 0) {
+    throw "Gagal menjalankan proses (kode $($result.ReturnValue)): $commandLine"
+  }
+  return [int]$result.ProcessId
+}
+
 function Start-Database {
   Assert-Binaries
   if (-not (Test-Initialized)) { Initialize-Database }
@@ -125,14 +144,11 @@ function Start-Database {
   }
 
   Write-Step "Menjalankan PostgreSQL di 127.0.0.1:$Port"
-  & $PgCtl -D $DataDir -l $LogFile -w start
-  if ($LASTEXITCODE -ne 0) {
-    throw "PostgreSQL gagal start. Lihat log: $LogFile"
-  }
+  $null = Start-DetachedProcess $PgCtl @('-D', $DataDir, '-l', $LogFile, 'start') (Split-Path -Parent $PgCtl)
 
   $ok = $false
-  for ($i = 0; $i -lt 20; $i++) {
-    Start-Sleep -Milliseconds 250
+  for ($i = 0; $i -lt 60; $i++) {
+    Start-Sleep -Milliseconds 300
     if ((Test-NetConnection -ComputerName '127.0.0.1' -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue)) {
       $ok = $true
       break

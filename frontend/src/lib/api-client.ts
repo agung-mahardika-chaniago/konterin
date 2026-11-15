@@ -60,7 +60,10 @@ async function decodeEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   if (!response.ok || !payload?.success) {
     const fallback: ApiErrorBody = {
       code: response.status === 0 ? 'NETWORK_ERROR' : 'UNKNOWN_ERROR',
-      message: 'Tidak dapat memproses permintaan. Periksa koneksi Anda.',
+      message:
+        response.status >= 500
+          ? 'Server FixPhone tidak merespons. Pastikan aplikasi masih berjalan (FixPhone.exe status) lalu muat ulang halaman.'
+          : 'Tidak dapat memproses permintaan. Periksa koneksi Anda.',
     };
     throw new ApiError(response.status, payload?.error ?? fallback, payload?.request_id);
   }
@@ -83,7 +86,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
   try {
     response = await requestRaw(path, options);
   } catch {
-    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.' });
+    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Pastikan FixPhone masih berjalan lalu coba lagi.' });
   }
 
   if (response.status === 401 && retry && !path.startsWith('/auth/refresh') && !path.startsWith('/auth/login')) {
@@ -105,7 +108,7 @@ export async function apiRequestEnvelope<T>(path: string, options: RequestOption
   try {
     response = await requestRaw(path, options);
   } catch {
-    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.' });
+    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Pastikan FixPhone masih berjalan lalu coba lagi.' });
   }
 
   if (response.status === 401 && retry && !path.startsWith('/auth/refresh') && !path.startsWith('/auth/login')) {
@@ -145,7 +148,7 @@ export async function apiDownload(path: string, retry = true): Promise<Downloade
   try {
     response = await requestRaw(path, { method: 'GET' });
   } catch {
-    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.' });
+    throw new ApiError(0, { code: 'NETWORK_ERROR', message: 'Tidak dapat terhubung ke server. Pastikan FixPhone masih berjalan lalu coba lagi.' });
   }
 
   if (response.status === 401 && retry) {
