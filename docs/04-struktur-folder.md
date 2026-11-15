@@ -376,12 +376,12 @@ Root `docker-compose.yml` mendefinisikan service: `postgres`, `migrate`,
 
 ```
 scripts/
-├── dev.ps1            # Windows: jalankan backend + frontend
-├── dev.sh             # Linux/macOS
-├── migrate.ps1
-├── seed.ps1
-├── test-all.ps1
-└── gen-icons.ps1
+├── fixphone.ps1       # Launcher Windows: DB + API + frontend (tanpa Docker)
+├── dev-db.ps1         # PostgreSQL portable (download/init/start/stop/reset)
+├── restore-drill.ps1  # Backup & restore drill
+├── smoke-prod.ps1     # Smoke test production (PowerShell)
+├── smoke-prod.sh      # Smoke test production (bash/CI)
+└── check-docs.mjs     # Validasi tautan & konsistensi dokumen
 ```
 
 ---

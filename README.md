@@ -186,7 +186,33 @@ npm run e2e       # Playwright; butuh API + Vite berjalan
 Perilaku autentikasi, RBAC, dan cara reset password dijelaskan di
 [`docs/10-implementasi-tahap-3.md`](docs/10-implementasi-tahap-3.md).
 
-### 4.4 Makefile
+### 4.4 Menjalankan cepat tanpa Docker (Windows)
+
+Dobel-klik **`FixPhone-Mulai.cmd`**. Launcher otomatis:
+
+1. membuat `.env` dari templat beserta secret acak (bila belum ada),
+2. mengunduh + menjalankan PostgreSQL portable (port 55432),
+3. `db-setup`, `migrate up`, `seed` (aman diulang),
+4. menanyakan data toko pertama bila database masih kosong,
+5. membangun API dan menjalankan Vite, lalu membuka
+   `http://127.0.0.1:5173`.
+
+Hentikan dengan **`FixPhone-Hentikan.cmd`**. Perintah manual yang setara:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 start
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 status
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 logs
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 stop
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fixphone.ps1 shortcut
+```
+
+Proses berjalan di background; PID dan log ada di `.dev/run/`. Prasyarat hanya
+Go 1.26+ dan Node.js 20+ — Docker tidak diperlukan. Launcher tidak membuat data
+contoh: tenant pertama dibuat dari input Anda (atau parameter
+`-TenantName`, `-OwnerEmail`, `-OwnerPassword`).
+
+### 4.5 Makefile
 
 Jika GNU Make tersedia:
 
@@ -198,7 +224,7 @@ make test
 make api
 ```
 
-### 4.5 Production (ringkas)
+### 4.6 Production (ringkas)
 
 Panduan lengkap ada di [`docs/20-runbook-operasional.md`](docs/20-runbook-operasional.md).
 
